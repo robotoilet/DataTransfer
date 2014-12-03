@@ -11,14 +11,27 @@
 #define MINUTE 60 * SECOND
 #define HOUR 60 * MINUTE
 
+#define LOG_DIR "/mnt/sda1"
 #define LOG_PATH "/mnt/sda1/datalog_"
 #define LOG_PATH_TIMESTAMP 18 // where to write the ts
-#define LOG_PATH_SUFFIX LOG_PATH_TIMESTAMP + 16 // where to write '.sent'
 
-#define HR_TIMESTAMP_SIZE 16
+#define HR_TIMESTAMP_SIZE 15
+#define LOG_PATH_LABEL LOG_PATH_TIMESTAMP + HR_TIMESTAMP_SIZE // where to write '.closed'
+                                                              // or '.sent'
+#define CLOSED_SUFFIX ".clsd"
+#define SENT_SUFFIX ".sent"
+#define LABEL_SIZE 5
+
 #define UNIX_TIMESTAMP_SIZE 10
 
+#define BYTESUM_CHARLENGTH 6
+#define CHECKSUM_LENGTH HR_TIMESTAMP_SIZE + BYTESUM_CHARLENGTH
+
+#define DATAPOINT_MAX 20
+
 // global vars
+File logDir = FileSystem.open(LOG_DIR);
+
 char dataFilePath[42] = LOG_PATH;
 byte dataPointCounter = 0; // the number of dataPoints in one dataFile
 char unixTimestamp[10];    // a unix timestamp
@@ -26,10 +39,10 @@ char hrTimestamp[16];      // a human readable timestamp
 
 Timer t;                   // the timer starts processes at configured time
                            //   (process: e.g. 'get sensor reading')
-unsigned long timeChecksum;// for our own 'checksum' calculation
-unsigned int valChecksum;  // for our own 'checksum' calculation
+unsigned long checksumByteSum;
+char checksum[CHECKSUM_LENGTH];  // for our own 'checksum' calculation
 
-byte server[] = { 10, 10, 63, 129 };  // WIFI-specifics
+byte server[] = { 127, 0, 0, 1 };  // WIFI-specifics
 
 YunClient yunClient;
 PubSubClient client(server, 1883, callback, yunClient);
@@ -61,7 +74,7 @@ void setup() {
   t.every(10 * SECOND, writeDataForSensorTwo);
 
   // (3) data transfer to server
-//  t.every(MINUTE, sendData);
+  t.every(5 * MINUTE, sendData);
 
 }
 
@@ -78,19 +91,24 @@ void createNewDataFile(){
   dataFile.close();
 }
 
-void renameDataFile(char* label, byte pos, byte size){
-  Serial.println("renameDataFile: label=" + String(label) + ", pos=" + pos);
-
+void relabelDataFile(char* fileName, char* label){
   Process rename;
   rename.begin("mv");
-  rename.addParameter(dataFilePath);
-  Serial.println("dataFilePath: " + String(dataFilePath));
-  for (byte i=0; i<size; i++) {
-    dataFilePath[pos + i] = label[i];
+  rename.addParameter(fileName);
+  Serial.println("filename before: " + String(fileName));
+  Serial.println("LOG_PATH_LABEL - 1 : " + String(LOG_PATH_LABEL - 1));
+  Serial.println("filename at this pos: " + String(fileName[LOG_PATH_LABEL - 1]));
+  for (byte i=0; i<LABEL_SIZE; i++) {
+    Serial.println("LOG_PATH_LABEL + i: " + String(i + LOG_PATH_LABEL));
+    Serial.println("filename at this pos before: " + String(fileName[i + LOG_PATH_LABEL]));
+    fileName[LOG_PATH_LABEL + i] = label[i];
+    Serial.println("filename at this pos after: " + String(fileName[i + LOG_PATH_LABEL]));
+    Serial.println("filename total: " + String(fileName));
   }
-  rename.addParameter(dataFilePath);
-  Serial.println("dataFilePath: " + String(dataFilePath));
+  rename.addParameter(fileName);
+  Serial.println("renamed filename to: " + String(fileName));
   rename.run();
+  fileName[LOG_PATH_LABEL] = '\0';
 }
 
 // Write the current time into a provided char array;
@@ -117,7 +135,6 @@ void getTimestamp(char* tsArray) {
 }
 
 void writeDataForSensorOne() {
-  Serial.println("Starting to collect and write data for sensor one");
   if (checkCounter()) {
     // due to a bug I can't use dataFile as a global var with Yun:
     // https://github.com/arduino/Arduino/issues/1810
@@ -139,20 +156,19 @@ void writeDataForSensorTwo() {
 bool checkCounter() {
   Serial.println("dataPointCounter: " + String(dataPointCounter));
   boolean bol;
-  if (dataPointCounter < 50) {
+  if (dataPointCounter < DATAPOINT_MAX) {
     dataPointCounter ++;
     bol = true;
   } else {
-    renameDataFile(".closed", LOG_PATH_SUFFIX, 7);
+    relabelDataFile(dataFilePath, CLOSED_SUFFIX);
     // 2. create a new file with timestamped name
     createNewDataFile();
     bol = false;
     dataPointCounter = 0;
   }
   // in any case get a current timestamp to pass on to sensor(s)
-  Serial.println("unixTimestamp: " + String(unixTimestamp));
   getTimestamp(unixTimestamp);
-  Serial.println("unixTimestamp: " + String(unixTimestamp));
+  Serial.println("created unixTimestamp: " + String(unixTimestamp));
   return bol;
 }
 
@@ -160,74 +176,62 @@ void loop () {
   t.update();
 }
 
-//// 3. Data Transfer to server
-//void sendData() {
-//  Serial.println("Preparing to send data");
-//  readData();
-//  dataToSend = xDataGrouped + yDataGrouped + zDataGrouped;
-//  Serial.println("Data to send: " + dataToSend);
-//  dataToSend.toCharArray(sendBuffer, 300);
-//  // generate a hex encoded
-//
-//  String stringsum = String(timeChecksum) + "_" + String(valChecksum);
-//  char checksum[stringsum.length()];
-//  stringsum.toCharArray(checksum, sizeof(checksum));
-//
-//  // now send it: try to connect, if there's a connection, publish
-//  // the stuff
-//  if (client.connect("siteX", "punterX", "punterX")) {
-//    client.publish(checksum, sendBuffer);
-//  }
-//
-//  // tidy up the checksums
-//  timeChecksum = 0;
-//  valChecksum = 0;
-//}
-//
-//void readData() {
-//  Serial.println("reading data");
-//  File f = FileSystem.open(LOGFILE, FILE_APPEND);
-//  String sensorName;
-//  if (f) {
-//    Serial.println("readData: file object there");
-//    String line = readLine(f);
-//    Serial.println("readData: have a line: " + line);
-//    while (line != "EOF") {
-//      sensorName = getSensorName(line);
-//      if (sensorName == "sensorX")
-//        xDataGrouped += getSensorData(line);
-//      else if (sensorName == "sensorY")
-//        yDataGrouped += getSensorData(line);
-//      else if (sensorName == "sensorZ")
-//        zDataGrouped += getSensorData(line);
-//      line = readLine(f);
-//    }
-//    f.close();
-//  }
-//}
-//
-//String readLine(File f) {
-//  int b = f.read();
-//  while (b != -1) {
-//    char c = (char)b;
-//    String line = "";
-//    if (c == '\n') {
-//      return line;
-//      line += c;
-//      char c = (char)f.read();
-//    }
-//    return line; // breaks out of the outer while loop delivering a line
-//  }
-//  return "EOF";
-//}
-//
-//String getSensorName(String line) {
-//  int firstComma = line.indexOf(',');
-//  return line.substring(0, firstComma);
-//}
-//String getSensorData(String line) {
-//  int firstComma = line.indexOf(',');
-//  return line.substring(firstComma + 1, line.length());
-//}
-//
-//
+
+bool isClosed(const char* filename) {
+  byte sizeName = sizeof(filename);
+  byte sizeSuffix = sizeof(CLOSED_SUFFIX);
+  for (byte i=0;i<sizeSuffix;i++) {
+    if (filename[(sizeName - 1 - i)] != CLOSED_SUFFIX[sizeSuffix - 1]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+
+// 3. Data Transfer to server
+void sendData() {
+  Serial.println("Preparing to send data");
+  while (true) {
+    File logFile = logDir.openNextFile();
+    const char* fName = logFile.name();
+    if (isClosed(fName)) {
+      char sendBuffer[logFile.size()]; // we can do this as all in one line?
+      readFile(logFile, sendBuffer);
+      buildChecksum(fName);
+      Serial.println("Created checksum: " + String(checksum));
+      // try to send it..
+      if (client.connect("siteX", "punterX", "punterX")) {
+        client.publish(checksum, sendBuffer);
+        logFile.close();
+        dataFilePath[0] = '\0';
+        strcpy(dataFilePath, fName);
+        relabelDataFile(dataFilePath, SENT_SUFFIX);
+      } else {
+        logFile.close();
+      }
+      // close and rename it..
+    } else {
+      logFile.close();
+    }
+  }
+}
+
+void buildChecksum(const char* fName) {
+  checksum[0] = '\0';
+  String(checksumByteSum).toCharArray(checksum, BYTESUM_CHARLENGTH);
+  for (byte i=0;i<HR_TIMESTAMP_SIZE;i++) {
+    checksum[BYTESUM_CHARLENGTH + i] = fName[LOG_PATH_TIMESTAMP + i];
+  }
+}
+
+void readFile(File f, char* buffer) {
+  checksumByteSum = 0;
+  unsigned int i = 0;
+  int b = f.read();
+  while (b != -1) {
+    buffer[i] = (char)b;
+    checksumByteSum += b;
+    i++;
+  }
+}
