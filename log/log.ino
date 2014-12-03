@@ -21,18 +21,19 @@
 #define CLOSED_SUFFIX ".clsd"
 #define SENT_SUFFIX ".sent"
 #define LABEL_SIZE 5
+#define FILENAME_SIZE LOG_PATH_LABEL + LABEL_SIZE
 
 #define UNIX_TIMESTAMP_SIZE 10
 
 #define BYTESUM_CHARLENGTH 6
 #define CHECKSUM_LENGTH HR_TIMESTAMP_SIZE + BYTESUM_CHARLENGTH
 
-#define DATAPOINT_MAX 20
+#define DATAPOINT_MAX 10
 
 // global vars
 File logDir = FileSystem.open(LOG_DIR);
 
-char dataFilePath[42] = LOG_PATH;
+char dataFilePath[FILENAME_SIZE + 1] = LOG_PATH;
 byte dataPointCounter = 0; // the number of dataPoints in one dataFile
 char unixTimestamp[10];    // a unix timestamp
 char hrTimestamp[16];      // a human readable timestamp
@@ -42,7 +43,7 @@ Timer t;                   // the timer starts processes at configured time
 unsigned long checksumByteSum;
 char checksum[CHECKSUM_LENGTH];  // for our own 'checksum' calculation
 
-byte server[] = { 127, 0, 0, 1 };  // WIFI-specifics
+byte server[] = { 192, 168, 0, 7 };  // WIFI-specifics
 
 YunClient yunClient;
 PubSubClient client(server, 1883, callback, yunClient);
@@ -61,6 +62,7 @@ TestSensor testSensorNine('9'); // create TestSensor with it's UID
 
 // TODO: remove if unused!
 void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.println("CALLBACK!!! topic: " + String(topic));
   // handle message arrived
 }
 
@@ -88,7 +90,7 @@ void setup() {
   t.every(17 * SECOND, writeDataForSensorNine);
 
   // (3) data transfer to server
-  t.every(MINUTE, sendData);
+  t.every(20 * SECOND, sendData);
 
 }
 
@@ -97,7 +99,7 @@ void createNewDataFile(){
   for (byte i=0; i<HR_TIMESTAMP_SIZE; i++) {
     dataFilePath[LOG_PATH_TIMESTAMP + i] = char(hrTimestamp[i]);
   }
-  Serial.println("dataFilePath: " + String(dataFilePath));
+  Serial.println("\ndataFilePath: " + String(dataFilePath));
   // Only create the file here with the right filename;
   // due to a bug I can't use dataFile as a global var with Yun:
   // https://github.com/arduino/Arduino/issues/1810
@@ -223,7 +225,7 @@ void writeDataForSensorNine() {
 }
 
 bool checkCounter() {
-  Serial.println("dataPointCounter: " + String(dataPointCounter));
+  Serial.print("dp" + String(dataPointCounter) + "-");
   boolean bol;
   if (dataPointCounter < DATAPOINT_MAX) {
     dataPointCounter ++;
@@ -246,10 +248,8 @@ void loop () {
 
 
 bool isClosed(const char* filename) {
-  byte sizeName = sizeof(filename);
-  byte sizeSuffix = sizeof(CLOSED_SUFFIX);
-  for (byte i=0;i<sizeSuffix;i++) {
-    if (filename[(sizeName - 1 - i)] != CLOSED_SUFFIX[sizeSuffix - 1]) {
+  for (byte i=0;i<LABEL_SIZE;i++) {
+    if (filename[(FILENAME_SIZE - 1 - i)] != CLOSED_SUFFIX[LABEL_SIZE - 1 - i]) {
       return false;
     }
   }
@@ -259,10 +259,11 @@ bool isClosed(const char* filename) {
 
 // 3. Data Transfer to server
 void sendData() {
+  char sendFilePath[FILENAME_SIZE + 1] = LOG_PATH;
   Serial.println("Preparing to send data");
-  while (true) {
-    File logFile = logDir.openNextFile();
+  while (File logFile = logDir.openNextFile()) {
     const char* fName = logFile.name();
+    Serial.println(fName);
     if (isClosed(fName)) {
       char sendBuffer[logFile.size()]; // we can do this as all in one line?
       readFile(logFile, sendBuffer);
@@ -270,11 +271,12 @@ void sendData() {
       Serial.println("Created checksum: " + String(checksum));
       // try to send it..
       if (client.connect("siteX", "punterX", "punterX")) {
+        Serial.println("Got a connection!");
         client.publish(checksum, sendBuffer);
         logFile.close();
-        dataFilePath[0] = '\0';
-        strcpy(dataFilePath, fName);
-        relabelDataFile(dataFilePath, SENT_SUFFIX);
+        sendFilePath[0] = '\0';
+        strcpy(sendFilePath, fName);
+        relabelDataFile(sendFilePath, SENT_SUFFIX);
       } else {
         logFile.close();
       }
@@ -285,15 +287,25 @@ void sendData() {
   }
 }
 
+// build a 'checksum' of format <checksumByteSum>:<timestamp of filename>
 void buildChecksum(const char* fName) {
   checksum[0] = '\0';
   String(checksumByteSum).toCharArray(checksum, BYTESUM_CHARLENGTH);
+
+  // in case the bytesum is a digit less long then expected, we fill the
+  // gap because otherwise the checksum wouldn't read as a whole
+  if (checksum[BYTESUM_CHARLENGTH - 2] == '\0') {
+    checksum[BYTESUM_CHARLENGTH - 2] = ':';
+  }
+  checksum[BYTESUM_CHARLENGTH - 1] = ':';
+
   for (byte i=0;i<HR_TIMESTAMP_SIZE;i++) {
     checksum[BYTESUM_CHARLENGTH + i] = fName[LOG_PATH_TIMESTAMP + i];
   }
 }
 
 void readFile(File f, char* buffer) {
+  Serial.println("starting to read " + String(f.name()));
   checksumByteSum = 0;
   unsigned int i = 0;
   int b = f.read();
@@ -301,5 +313,6 @@ void readFile(File f, char* buffer) {
     buffer[i] = (char)b;
     checksumByteSum += b;
     i++;
+    b = f.read();
   }
 }
