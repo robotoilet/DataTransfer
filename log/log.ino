@@ -1,10 +1,10 @@
 #include <FileIO.h>
 #include "Timer.h"
 #include "TestSensor.h"
+#include "YunBoard.h"
 
 // for MQTT stuff
 #include <SPI.h>
-#include <YunClient.h>
 #include <PubSubClient.h>
 
 #define SECOND 1000L
@@ -30,8 +30,10 @@
 
 #define DATAPOINT_MAX 10
 
+YunBoard board; // change this to your board
+
 // global vars
-File logDir = FileSystem.open(LOG_DIR);
+File logDir = board.openFile(LOG_DIR);
 
 char dataFilePath[FILENAME_SIZE + 1] = LOG_PATH;
 byte dataPointCounter = 0; // the number of dataPoints in one dataFile
@@ -68,9 +70,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 
 void setup() {
-  Bridge.begin();
+  board.begin();
   Serial.begin(9600);
-  FileSystem.begin();
 
   while(!Serial);
   Serial.println("data transfer of fake data\n");
@@ -103,7 +104,7 @@ void createNewDataFile(){
   // Only create the file here with the right filename;
   // due to a bug I can't use dataFile as a global var with Yun:
   // https://github.com/arduino/Arduino/issues/1810
-  File dataFile = FileSystem.open(dataFilePath, FILE_APPEND);
+  File dataFile = board.openFile(dataFilePath, FILE_APPEND);
   dataFile.close();
 }
 
@@ -146,7 +147,7 @@ void writeDataForSensorOne() {
   if (checkCounter()) {
     // due to a bug I can't use dataFile as a global var with Yun:
     // https://github.com/arduino/Arduino/issues/1810
-    File dataFile = FileSystem.open(dataFilePath, FILE_APPEND);
+    File dataFile = board.openFile(dataFilePath, FILE_APPEND);
     testSensorOne.collectData(dataFile, unixTimestamp);
     dataFile.close();
   }
@@ -155,7 +156,7 @@ void writeDataForSensorTwo() {
   if (checkCounter()) {
     // due to a bug I can't use dataFile as a global var with Yun:
     // https://github.com/arduino/Arduino/issues/1810
-    File dataFile = FileSystem.open(dataFilePath, FILE_APPEND);
+    File dataFile = board.openFile(dataFilePath, FILE_APPEND);
     testSensorTwo.collectData(dataFile, unixTimestamp);
     dataFile.close();
   }
@@ -164,7 +165,7 @@ void writeDataForSensorThree() {
   if (checkCounter()) {
     // due to a bug I can't use dataFile as a global var with Yun:
     // https://github.com/arduino/Arduino/issues/1810
-    File dataFile = FileSystem.open(dataFilePath, FILE_APPEND);
+    File dataFile = board.openFile(dataFilePath, FILE_APPEND);
     testSensorThree.collectData(dataFile, unixTimestamp);
     dataFile.close();
   }
@@ -173,7 +174,7 @@ void writeDataForSensorFour() {
   if (checkCounter()) {
     // due to a bug I can't use dataFile as a global var with Yun:
     // https://github.com/arduino/Arduino/issues/1810
-    File dataFile = FileSystem.open(dataFilePath, FILE_APPEND);
+    File dataFile = board.openFile(dataFilePath, FILE_APPEND);
     testSensorFour.collectData(dataFile, unixTimestamp);
     dataFile.close();
   }
@@ -182,7 +183,7 @@ void writeDataForSensorFive() {
   if (checkCounter()) {
     // due to a bug I can't use dataFile as a global var with Yun:
     // https://github.com/arduino/Arduino/issues/1810
-    File dataFile = FileSystem.open(dataFilePath, FILE_APPEND);
+    File dataFile = board.openFile(dataFilePath, FILE_APPEND);
     testSensorFive.collectData(dataFile, unixTimestamp);
     dataFile.close();
   }
@@ -191,7 +192,7 @@ void writeDataForSensorSix() {
   if (checkCounter()) {
     // due to a bug I can't use dataFile as a global var with Yun:
     // https://github.com/arduino/Arduino/issues/1810
-    File dataFile = FileSystem.open(dataFilePath, FILE_APPEND);
+    File dataFile = board.openFile(dataFilePath, FILE_APPEND);
     testSensorSix.collectData(dataFile, unixTimestamp);
     dataFile.close();
   }
@@ -200,7 +201,7 @@ void writeDataForSensorSeven() {
   if (checkCounter()) {
     // due to a bug I can't use dataFile as a global var with Yun:
     // https://github.com/arduino/Arduino/issues/1810
-    File dataFile = FileSystem.open(dataFilePath, FILE_APPEND);
+    File dataFile = board.openFile(dataFilePath, FILE_APPEND);
     testSensorSeven.collectData(dataFile, unixTimestamp);
     dataFile.close();
   }
@@ -209,7 +210,7 @@ void writeDataForSensorEight() {
   if (checkCounter()) {
     // due to a bug I can't use dataFile as a global var with Yun:
     // https://github.com/arduino/Arduino/issues/1810
-    File dataFile = FileSystem.open(dataFilePath, FILE_APPEND);
+    File dataFile = board.openFile(dataFilePath, FILE_APPEND);
     testSensorEight.collectData(dataFile, unixTimestamp);
     dataFile.close();
   }
@@ -218,7 +219,7 @@ void writeDataForSensorNine() {
   if (checkCounter()) {
     // due to a bug I can't use dataFile as a global var with Yun:
     // https://github.com/arduino/Arduino/issues/1810
-    File dataFile = FileSystem.open(dataFilePath, FILE_APPEND);
+    File dataFile = board.openFile(dataFilePath, FILE_APPEND);
     testSensorNine.collectData(dataFile, unixTimestamp);
     dataFile.close();
   }
