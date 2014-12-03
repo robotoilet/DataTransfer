@@ -50,6 +50,13 @@ PubSubClient client(server, 1883, callback, yunClient);
 // the actural sensors this sketch knows about
 TestSensor testSensorOne('1'); // create TestSensor with it's UID
 TestSensor testSensorTwo('2'); // create TestSensor with it's UID
+TestSensor testSensorThree('3'); // create TestSensor with it's UID
+TestSensor testSensorFour('4'); // create TestSensor with it's UID
+TestSensor testSensorFive('5'); // create TestSensor with it's UID
+TestSensor testSensorSix('6'); // create TestSensor with it's UID
+TestSensor testSensorSeven('7'); // create TestSensor with it's UID
+TestSensor testSensorEight('8'); // create TestSensor with it's UID
+TestSensor testSensorNine('9'); // create TestSensor with it's UID
 
 
 // TODO: remove if unused!
@@ -72,9 +79,16 @@ void setup() {
   // (1) sensor data collection and logging
   t.every(5 * SECOND, writeDataForSensorOne);
   t.every(10 * SECOND, writeDataForSensorTwo);
+  t.every(11 * SECOND, writeDataForSensorThree);
+  t.every(12 * SECOND, writeDataForSensorFour);
+  t.every(13 * SECOND, writeDataForSensorFive);
+  t.every(14 * SECOND, writeDataForSensorSix);
+  t.every(15 * SECOND, writeDataForSensorSeven);
+  t.every(16 * SECOND, writeDataForSensorEight);
+  t.every(17 * SECOND, writeDataForSensorNine);
 
   // (3) data transfer to server
-  t.every(5 * MINUTE, sendData);
+  t.every(MINUTE, sendData);
 
 }
 
@@ -95,18 +109,10 @@ void relabelDataFile(char* fileName, char* label){
   Process rename;
   rename.begin("mv");
   rename.addParameter(fileName);
-  Serial.println("filename before: " + String(fileName));
-  Serial.println("LOG_PATH_LABEL - 1 : " + String(LOG_PATH_LABEL - 1));
-  Serial.println("filename at this pos: " + String(fileName[LOG_PATH_LABEL - 1]));
   for (byte i=0; i<LABEL_SIZE; i++) {
-    Serial.println("LOG_PATH_LABEL + i: " + String(i + LOG_PATH_LABEL));
-    Serial.println("filename at this pos before: " + String(fileName[i + LOG_PATH_LABEL]));
     fileName[LOG_PATH_LABEL + i] = label[i];
-    Serial.println("filename at this pos after: " + String(fileName[i + LOG_PATH_LABEL]));
-    Serial.println("filename total: " + String(fileName));
   }
   rename.addParameter(fileName);
-  Serial.println("renamed filename to: " + String(fileName));
   rename.run();
   fileName[LOG_PATH_LABEL] = '\0';
 }
@@ -152,6 +158,69 @@ void writeDataForSensorTwo() {
     dataFile.close();
   }
 }
+void writeDataForSensorThree() {
+  if (checkCounter()) {
+    // due to a bug I can't use dataFile as a global var with Yun:
+    // https://github.com/arduino/Arduino/issues/1810
+    File dataFile = FileSystem.open(dataFilePath, FILE_APPEND);
+    testSensorThree.collectData(dataFile, unixTimestamp);
+    dataFile.close();
+  }
+}
+void writeDataForSensorFour() {
+  if (checkCounter()) {
+    // due to a bug I can't use dataFile as a global var with Yun:
+    // https://github.com/arduino/Arduino/issues/1810
+    File dataFile = FileSystem.open(dataFilePath, FILE_APPEND);
+    testSensorFour.collectData(dataFile, unixTimestamp);
+    dataFile.close();
+  }
+}
+void writeDataForSensorFive() {
+  if (checkCounter()) {
+    // due to a bug I can't use dataFile as a global var with Yun:
+    // https://github.com/arduino/Arduino/issues/1810
+    File dataFile = FileSystem.open(dataFilePath, FILE_APPEND);
+    testSensorFive.collectData(dataFile, unixTimestamp);
+    dataFile.close();
+  }
+}
+void writeDataForSensorSix() {
+  if (checkCounter()) {
+    // due to a bug I can't use dataFile as a global var with Yun:
+    // https://github.com/arduino/Arduino/issues/1810
+    File dataFile = FileSystem.open(dataFilePath, FILE_APPEND);
+    testSensorSix.collectData(dataFile, unixTimestamp);
+    dataFile.close();
+  }
+}
+void writeDataForSensorSeven() {
+  if (checkCounter()) {
+    // due to a bug I can't use dataFile as a global var with Yun:
+    // https://github.com/arduino/Arduino/issues/1810
+    File dataFile = FileSystem.open(dataFilePath, FILE_APPEND);
+    testSensorSeven.collectData(dataFile, unixTimestamp);
+    dataFile.close();
+  }
+}
+void writeDataForSensorEight() {
+  if (checkCounter()) {
+    // due to a bug I can't use dataFile as a global var with Yun:
+    // https://github.com/arduino/Arduino/issues/1810
+    File dataFile = FileSystem.open(dataFilePath, FILE_APPEND);
+    testSensorEight.collectData(dataFile, unixTimestamp);
+    dataFile.close();
+  }
+}
+void writeDataForSensorNine() {
+  if (checkCounter()) {
+    // due to a bug I can't use dataFile as a global var with Yun:
+    // https://github.com/arduino/Arduino/issues/1810
+    File dataFile = FileSystem.open(dataFilePath, FILE_APPEND);
+    testSensorNine.collectData(dataFile, unixTimestamp);
+    dataFile.close();
+  }
+}
 
 bool checkCounter() {
   Serial.println("dataPointCounter: " + String(dataPointCounter));
@@ -168,7 +237,6 @@ bool checkCounter() {
   }
   // in any case get a current timestamp to pass on to sensor(s)
   getTimestamp(unixTimestamp);
-  Serial.println("created unixTimestamp: " + String(unixTimestamp));
   return bol;
 }
 
