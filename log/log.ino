@@ -1,7 +1,7 @@
-#include <FileIO.h>
+#define YUN
+
 #include "Timer.h"
 #include "TestSensor.h"
-#include "YunBoard.h"
 
 // for MQTT stuff
 #include <SPI.h>
@@ -30,36 +30,39 @@
 
 #define DATAPOINT_MAX 10
 
-YunBoard board; // change this to your board
+#ifdef YUN
+  #include "YunBoard.h"
+  #include <YunClient.h>
+  YunBoard board; // change this to your board
+#endif
 
 // global vars
-File logDir = board.openFile(LOG_DIR);
 
 char dataFilePath[FILENAME_SIZE + 1] = LOG_PATH;
 byte dataPointCounter = 0; // the number of dataPoints in one dataFile
-char unixTimestamp[10];    // a unix timestamp
-char hrTimestamp[16];      // a human readable timestamp
+char unixTimestamp[UNIX_TIMESTAMP_SIZE + 1];    // a unix timestamp
+char hrTimestamp[HR_TIMESTAMP_SIZE + 1];      // a human readable timestamp
 
 Timer t;                   // the timer starts processes at configured time
                            //   (process: e.g. 'get sensor reading')
 unsigned long checksumByteSum;
 char checksum[CHECKSUM_LENGTH];  // for our own 'checksum' calculation
 
-byte server[] = { 192, 168, 0, 7 };  // WIFI-specifics
+byte server[] = { 10, 10, 63, 221 };  // WIFI-specifics
 
 YunClient yunClient;
 PubSubClient client(server, 1883, callback, yunClient);
 
 // the actural sensors this sketch knows about
-TestSensor testSensorOne('1'); // create TestSensor with it's UID
-TestSensor testSensorTwo('2'); // create TestSensor with it's UID
-TestSensor testSensorThree('3'); // create TestSensor with it's UID
-TestSensor testSensorFour('4'); // create TestSensor with it's UID
-TestSensor testSensorFive('5'); // create TestSensor with it's UID
-TestSensor testSensorSix('6'); // create TestSensor with it's UID
-TestSensor testSensorSeven('7'); // create TestSensor with it's UID
-TestSensor testSensorEight('8'); // create TestSensor with it's UID
-TestSensor testSensorNine('9'); // create TestSensor with it's UID
+TestSensor<YunBoard> testSensorOne('1'); // create TestSensor with it's UID
+TestSensor<YunBoard> testSensorTwo('2'); // create TestSensor with it's UID
+TestSensor<YunBoard> testSensorThree('3'); // create TestSensor with it's UID
+TestSensor<YunBoard> testSensorFour('4'); // create TestSensor with it's UID
+TestSensor<YunBoard> testSensorFive('5'); // create TestSensor with it's UID
+TestSensor<YunBoard> testSensorSix('6'); // create TestSensor with it's UID
+TestSensor<YunBoard> testSensorSeven('7'); // create TestSensor with it's UID
+TestSensor<YunBoard> testSensorEight('8'); // create TestSensor with it's UID
+TestSensor<YunBoard> testSensorNine('9'); // create TestSensor with it's UID
 
 
 // TODO: remove if unused!
@@ -91,7 +94,7 @@ void setup() {
   t.every(17 * SECOND, writeDataForSensorNine);
 
   // (3) data transfer to server
-  t.every(20 * SECOND, sendData);
+  t.every(30 * SECOND, sendData);
 
 }
 
@@ -101,23 +104,7 @@ void createNewDataFile(){
     dataFilePath[LOG_PATH_TIMESTAMP + i] = char(hrTimestamp[i]);
   }
   Serial.println("\ndataFilePath: " + String(dataFilePath));
-  // Only create the file here with the right filename;
-  // due to a bug I can't use dataFile as a global var with Yun:
-  // https://github.com/arduino/Arduino/issues/1810
-  File dataFile = board.openFile(dataFilePath, FILE_APPEND);
-  dataFile.close();
-}
-
-void relabelDataFile(char* fileName, char* label){
-  Process rename;
-  rename.begin("mv");
-  rename.addParameter(fileName);
-  for (byte i=0; i<LABEL_SIZE; i++) {
-    fileName[LOG_PATH_LABEL + i] = label[i];
-  }
-  rename.addParameter(fileName);
-  rename.run();
-  fileName[LOG_PATH_LABEL] = '\0';
+  board.createFile(dataFilePath);
 }
 
 // Write the current time into a provided char array;
@@ -137,91 +124,58 @@ void getTimestamp(char* tsArray) {
   int i = 0;
   while(time.available()>0) {
     char c = time.read();
-    if(c != '\n')
-      tsArray[i] = c;
-      i ++;
+    if (c == '\n') {
+      tsArray[i] = '\0';
+      break;
+    }
+    tsArray[i] = c;
+    i ++;
   }
 }
 
 void writeDataForSensorOne() {
   if (checkCounter()) {
-    // due to a bug I can't use dataFile as a global var with Yun:
-    // https://github.com/arduino/Arduino/issues/1810
-    File dataFile = board.openFile(dataFilePath, FILE_APPEND);
-    testSensorOne.collectData(dataFile, unixTimestamp);
-    dataFile.close();
+    testSensorOne.collectData(dataFilePath, FILENAME_SIZE + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorTwo() {
   if (checkCounter()) {
-    // due to a bug I can't use dataFile as a global var with Yun:
-    // https://github.com/arduino/Arduino/issues/1810
-    File dataFile = board.openFile(dataFilePath, FILE_APPEND);
-    testSensorTwo.collectData(dataFile, unixTimestamp);
-    dataFile.close();
+    testSensorTwo.collectData(dataFilePath, FILENAME_SIZE + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorThree() {
   if (checkCounter()) {
-    // due to a bug I can't use dataFile as a global var with Yun:
-    // https://github.com/arduino/Arduino/issues/1810
-    File dataFile = board.openFile(dataFilePath, FILE_APPEND);
-    testSensorThree.collectData(dataFile, unixTimestamp);
-    dataFile.close();
+    testSensorThree.collectData(dataFilePath, FILENAME_SIZE + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorFour() {
   if (checkCounter()) {
-    // due to a bug I can't use dataFile as a global var with Yun:
-    // https://github.com/arduino/Arduino/issues/1810
-    File dataFile = board.openFile(dataFilePath, FILE_APPEND);
-    testSensorFour.collectData(dataFile, unixTimestamp);
-    dataFile.close();
+    testSensorFour.collectData(dataFilePath, FILENAME_SIZE + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorFive() {
   if (checkCounter()) {
-    // due to a bug I can't use dataFile as a global var with Yun:
-    // https://github.com/arduino/Arduino/issues/1810
-    File dataFile = board.openFile(dataFilePath, FILE_APPEND);
-    testSensorFive.collectData(dataFile, unixTimestamp);
-    dataFile.close();
+    testSensorFive.collectData(dataFilePath, FILENAME_SIZE + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorSix() {
   if (checkCounter()) {
-    // due to a bug I can't use dataFile as a global var with Yun:
-    // https://github.com/arduino/Arduino/issues/1810
-    File dataFile = board.openFile(dataFilePath, FILE_APPEND);
-    testSensorSix.collectData(dataFile, unixTimestamp);
-    dataFile.close();
+    testSensorSix.collectData(dataFilePath, FILENAME_SIZE + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorSeven() {
   if (checkCounter()) {
-    // due to a bug I can't use dataFile as a global var with Yun:
-    // https://github.com/arduino/Arduino/issues/1810
-    File dataFile = board.openFile(dataFilePath, FILE_APPEND);
-    testSensorSeven.collectData(dataFile, unixTimestamp);
-    dataFile.close();
+    testSensorSeven.collectData(dataFilePath, FILENAME_SIZE + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorEight() {
   if (checkCounter()) {
-    // due to a bug I can't use dataFile as a global var with Yun:
-    // https://github.com/arduino/Arduino/issues/1810
-    File dataFile = board.openFile(dataFilePath, FILE_APPEND);
-    testSensorEight.collectData(dataFile, unixTimestamp);
-    dataFile.close();
+    testSensorEight.collectData(dataFilePath, FILENAME_SIZE + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorNine() {
   if (checkCounter()) {
-    // due to a bug I can't use dataFile as a global var with Yun:
-    // https://github.com/arduino/Arduino/issues/1810
-    File dataFile = board.openFile(dataFilePath, FILE_APPEND);
-    testSensorNine.collectData(dataFile, unixTimestamp);
-    dataFile.close();
+    testSensorNine.collectData(dataFilePath, FILENAME_SIZE + 1, unixTimestamp, board);
   }
 }
 
@@ -232,7 +186,7 @@ bool checkCounter() {
     dataPointCounter ++;
     bol = true;
   } else {
-    relabelDataFile(dataFilePath, CLOSED_SUFFIX);
+    board.relabelFile(dataFilePath, CLOSED_SUFFIX, LABEL_SIZE, LOG_PATH_LABEL);
     // 2. create a new file with timestamped name
     createNewDataFile();
     bol = false;
@@ -262,28 +216,20 @@ bool isClosed(const char* filename) {
 void sendData() {
   char sendFilePath[FILENAME_SIZE + 1] = LOG_PATH;
   Serial.println("Preparing to send data");
-  while (File logFile = logDir.openNextFile()) {
-    const char* fName = logFile.name();
-    Serial.println(fName);
-    if (isClosed(fName)) {
-      char sendBuffer[logFile.size()]; // we can do this as all in one line?
-      readFile(logFile, sendBuffer);
-      buildChecksum(fName);
-      Serial.println("Created checksum: " + String(checksum));
+  while (board.nextPathInDir(LOG_DIR, sendFilePath, CLOSED_SUFFIX)) {
+    //Serial.println("Checking file " + String(sendFilePath));
+    if (isClosed(sendFilePath)) {
+      //Serial.println("file " + String(sendFilePath) + " is closed and ready to send!");
+      char sendBuffer[board.fileSize(sendFilePath)]; // we can do this as all in one line?
+      board.readFile(sendFilePath, sendBuffer, checksumByteSum);
+      buildChecksum(sendFilePath);
+      //Serial.println("Created checksum: " + String(checksum));
       // try to send it..
       if (client.connect("siteX", "punterX", "punterX")) {
         Serial.println("Got a connection!");
         client.publish(checksum, sendBuffer);
-        logFile.close();
-        sendFilePath[0] = '\0';
-        strcpy(sendFilePath, fName);
-        relabelDataFile(sendFilePath, SENT_SUFFIX);
-      } else {
-        logFile.close();
+        board.relabelFile(sendFilePath, SENT_SUFFIX, LABEL_SIZE, LOG_PATH_LABEL);
       }
-      // close and rename it..
-    } else {
-      logFile.close();
     }
   }
 }
@@ -305,15 +251,3 @@ void buildChecksum(const char* fName) {
   }
 }
 
-void readFile(File f, char* buffer) {
-  Serial.println("starting to read " + String(f.name()));
-  checksumByteSum = 0;
-  unsigned int i = 0;
-  int b = f.read();
-  while (b != -1) {
-    buffer[i] = (char)b;
-    checksumByteSum += b;
-    i++;
-    b = f.read();
-  }
-}
