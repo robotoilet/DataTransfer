@@ -12,28 +12,44 @@
 #define HOUR 60 * MINUTE
 
 #define LOG_DIR "/mnt/sda1"
-#define LOG_PATH "/mnt/sda1/datalog_"
-#define LOG_PATH_TIMESTAMP 18 // where to write the ts
-
-#define HR_TIMESTAMP_SIZE 15
-#define LOG_PATH_LABEL LOG_PATH_TIMESTAMP + HR_TIMESTAMP_SIZE // where to write '.closed'
-                                                              // or '.sent'
-#define CLOSED_SUFFIX ".clsd"
-#define SENT_SUFFIX ".sent"
-#define LABEL_SIZE 5
-#define FILENAME_SIZE LOG_PATH_LABEL + LABEL_SIZE
+#define LOG_PATH "/mnt/sda1/"
+#define LOG_PATH_TIMESTAMP sizeof(LOG_PATH) - 1 // where to write the ts
 
 #define UNIX_TIMESTAMP_SIZE 10
 
+#define LOG_PATH_LABEL LOG_PATH_TIMESTAMP + UNIX_TIMESTAMP_SIZE // where to write '.c'
+                                                                // or '.s'
+#define CLOSED_SUFFIX ".c"
+#define SENT_SUFFIX ".s"
+#define LABEL_SIZE 5
+#define FILENAME_SIZE LOG_PATH_LABEL + LABEL_SIZE
+
+
 #define BYTESUM_CHARLENGTH 6
-#define CHECKSUM_LENGTH HR_TIMESTAMP_SIZE + BYTESUM_CHARLENGTH
+#define CHECKSUM_LENGTH UNIX_TIMESTAMP_SIZE + BYTESUM_CHARLENGTH
 
 #define DATAPOINT_MAX 10
+
+byte server[] = { 10, 10, 63, 221 };  // WIFI-specifics
 
 #ifdef YUN
   #include "YunBoard.h"
   #include <YunClient.h>
   YunBoard board; // change this to your board
+
+  YunClient yunClient;
+  PubSubClient client(server, 1883, callback, yunClient);
+
+  // the actural sensors this sketch knows about
+  TestSensor<YunBoard> testSensorOne('1'); // create TestSensor with it's UID
+  TestSensor<YunBoard> testSensorTwo('2'); // create TestSensor with it's UID
+  TestSensor<YunBoard> testSensorThree('3'); // create TestSensor with it's UID
+  TestSensor<YunBoard> testSensorFour('4'); // create TestSensor with it's UID
+  TestSensor<YunBoard> testSensorFive('5'); // create TestSensor with it's UID
+  TestSensor<YunBoard> testSensorSix('6'); // create TestSensor with it's UID
+  TestSensor<YunBoard> testSensorSeven('7'); // create TestSensor with it's UID
+  TestSensor<YunBoard> testSensorEight('8'); // create TestSensor with it's UID
+  TestSensor<YunBoard> testSensorNine('9'); // create TestSensor with it's UID
 #endif
 
 // global vars
@@ -41,28 +57,11 @@
 char dataFilePath[FILENAME_SIZE + 1] = LOG_PATH;
 byte dataPointCounter = 0; // the number of dataPoints in one dataFile
 char unixTimestamp[UNIX_TIMESTAMP_SIZE + 1];    // a unix timestamp
-char hrTimestamp[HR_TIMESTAMP_SIZE + 1];      // a human readable timestamp
 
 Timer t;                   // the timer starts processes at configured time
                            //   (process: e.g. 'get sensor reading')
 unsigned long checksumByteSum;
 char checksum[CHECKSUM_LENGTH];  // for our own 'checksum' calculation
-
-byte server[] = { 10, 10, 63, 221 };  // WIFI-specifics
-
-YunClient yunClient;
-PubSubClient client(server, 1883, callback, yunClient);
-
-// the actural sensors this sketch knows about
-TestSensor<YunBoard> testSensorOne('1'); // create TestSensor with it's UID
-TestSensor<YunBoard> testSensorTwo('2'); // create TestSensor with it's UID
-TestSensor<YunBoard> testSensorThree('3'); // create TestSensor with it's UID
-TestSensor<YunBoard> testSensorFour('4'); // create TestSensor with it's UID
-TestSensor<YunBoard> testSensorFive('5'); // create TestSensor with it's UID
-TestSensor<YunBoard> testSensorSix('6'); // create TestSensor with it's UID
-TestSensor<YunBoard> testSensorSeven('7'); // create TestSensor with it's UID
-TestSensor<YunBoard> testSensorEight('8'); // create TestSensor with it's UID
-TestSensor<YunBoard> testSensorNine('9'); // create TestSensor with it's UID
 
 
 // TODO: remove if unused!
@@ -99,38 +98,12 @@ void setup() {
 }
 
 void createNewDataFile(){
-  getTimestamp(hrTimestamp);
-  for (byte i=0; i<HR_TIMESTAMP_SIZE; i++) {
-    dataFilePath[LOG_PATH_TIMESTAMP + i] = char(hrTimestamp[i]);
+  board.getTimestamp(unixTimestamp);
+  for (byte i=0; i<UNIX_TIMESTAMP_SIZE; i++) {
+    dataFilePath[LOG_PATH_TIMESTAMP + i] = char(unixTimestamp[i]);
   }
   Serial.println("\ndataFilePath: " + String(dataFilePath));
   board.createFile(dataFilePath);
-}
-
-// Write the current time into a provided char array;
-// If the length of the array equals 10 a unix timestamp
-// is created (10 characters), otherwise a human-readable format will be
-// written (16 characters)
-void getTimestamp(char* tsArray) {
-  Process time;
-  time.begin("date");
-  if (tsArray == unixTimestamp) {
-    time.addParameter("+%s");
-  } else {
-    time.addParameter("+%Y%m%d-%H%M%S");
-  }
-  time.run();
-
-  int i = 0;
-  while(time.available()>0) {
-    char c = time.read();
-    if (c == '\n') {
-      tsArray[i] = '\0';
-      break;
-    }
-    tsArray[i] = c;
-    i ++;
-  }
 }
 
 void writeDataForSensorOne() {
@@ -193,7 +166,7 @@ bool checkCounter() {
     dataPointCounter = 0;
   }
   // in any case get a current timestamp to pass on to sensor(s)
-  getTimestamp(unixTimestamp);
+  board.getTimestamp(unixTimestamp);
   return bol;
 }
 
@@ -201,35 +174,22 @@ void loop () {
   t.update();
 }
 
-
-bool isClosed(const char* filename) {
-  for (byte i=0;i<LABEL_SIZE;i++) {
-    if (filename[(FILENAME_SIZE - 1 - i)] != CLOSED_SUFFIX[LABEL_SIZE - 1 - i]) {
-      return false;
-    }
-  }
-  return true;
-}
-
-
 // 3. Data Transfer to server
 void sendData() {
   char sendFilePath[FILENAME_SIZE + 1] = LOG_PATH;
   Serial.println("Preparing to send data");
   while (board.nextPathInDir(LOG_DIR, sendFilePath, CLOSED_SUFFIX)) {
     //Serial.println("Checking file " + String(sendFilePath));
-    if (isClosed(sendFilePath)) {
-      //Serial.println("file " + String(sendFilePath) + " is closed and ready to send!");
-      char sendBuffer[board.fileSize(sendFilePath)]; // we can do this as all in one line?
-      board.readFile(sendFilePath, sendBuffer, checksumByteSum);
-      buildChecksum(sendFilePath);
-      //Serial.println("Created checksum: " + String(checksum));
-      // try to send it..
-      if (client.connect("siteX", "punterX", "punterX")) {
-        Serial.println("Got a connection!");
-        client.publish(checksum, sendBuffer);
-        board.relabelFile(sendFilePath, SENT_SUFFIX, LABEL_SIZE, LOG_PATH_LABEL);
-      }
+    //Serial.println("file " + String(sendFilePath) + " is closed and ready to send!");
+    char sendBuffer[board.fileSize(sendFilePath)]; // we can do this as all in one line?
+    board.readFile(sendFilePath, sendBuffer, checksumByteSum);
+    buildChecksum(sendFilePath);
+    //Serial.println("Created checksum: " + String(checksum));
+    // try to send it..
+    if (client.connect("siteX", "punterX", "punterX")) {
+      Serial.println("Got a connection!");
+      client.publish(checksum, sendBuffer);
+      board.relabelFile(sendFilePath, SENT_SUFFIX, LABEL_SIZE, LOG_PATH_LABEL);
     }
   }
 }
@@ -246,7 +206,7 @@ void buildChecksum(const char* fName) {
   }
   checksum[BYTESUM_CHARLENGTH - 1] = ':';
 
-  for (byte i=0;i<HR_TIMESTAMP_SIZE;i++) {
+  for (byte i=0;i<UNIX_TIMESTAMP_SIZE;i++) {
     checksum[BYTESUM_CHARLENGTH + i] = fName[LOG_PATH_TIMESTAMP + i];
   }
 }
