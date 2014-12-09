@@ -11,21 +11,22 @@
 #define MINUTE 60 * SECOND
 #define HOUR 60 * MINUTE
 
-#define LOG_DIR "/mnt/sda1"
-#define LOG_PATH "/mnt/sda1/"
-#define LOG_PATH_TIMESTAMP sizeof(LOG_PATH) - 1 // where to write the ts
+#define LOGDIR  "/mnt/sda1"
+#define LOGPATH "/mnt/sda1/"
+#define LOGPATH_TIMESTAMP_INDEX sizeof(LOGDIR) // where to write the ts in the path
 
-#define UNIX_TIMESTAMP_SIZE 10
+#define TIMESTAMP_LENGTH 10                    // number of chars of a unix ts
 
-#define LOG_PATH_LABEL_INDEX LOG_PATH_TIMESTAMP + UNIX_TIMESTAMP_SIZE // where to write '.c'
-                                                                // or '.s'
+#define LOGPATH_LABEL_INDEX LOGPATH_TIMESTAMP_INDEX + TIMESTAMP_LENGTH // where to write '.c'
+                                                                       // or '.s'
 #define CLOSED_SUFFIX ".c"
 #define SENT_SUFFIX ".s"
-#define LABEL_SIZE 5
-#define FILENAME_SIZE LOG_PATH_LABEL_INDEX + LABEL_SIZE
+#define LABEL_LENGTH sizeof(CLOSED_SUFFIX)
+
+#define FILENAME_LENGTH LOGPATH_LABEL_INDEX + LABEL_LENGTH
 
 #define BYTESUM_CHARLENGTH 6
-#define CHECKSUM_LENGTH UNIX_TIMESTAMP_SIZE + BYTESUM_CHARLENGTH
+#define CHECKSUM_LENGTH TIMESTAMP_LENGTH + BYTESUM_CHARLENGTH
 
 #define DATAPOINT_MAX 10
 
@@ -51,17 +52,24 @@ byte server[] = { 10, 10, 63, 221 };  // WIFI-specifics
   TestSensor<YunBoard> testSensorNine('9'); // create TestSensor with it's UID
 #endif
 
+// check our RAM
+int freeRam () 
+{
+    extern int __heap_start, *__brkval; 
+      int v; 
+        return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
+}
+
 // global vars
 
-char dataFilePath[FILENAME_SIZE + 1] = LOG_PATH;
+char dataFilePath[FILENAME_LENGTH + 1] = LOGPATH;
 byte dataPointCounter = 0; // the number of dataPoints in one dataFile
-char unixTimestamp[UNIX_TIMESTAMP_SIZE + 1];    // a unix timestamp
+char unixTimestamp[TIMESTAMP_LENGTH + 1];    // a unix timestamp
 
 Timer t;                   // the timer starts processes at configured time
                            //   (process: e.g. 'get sensor reading')
 unsigned long checksumByteSum;
 char checksum[CHECKSUM_LENGTH];  // for our own 'checksum' calculation
-
 
 // TODO: remove if unused!
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -69,13 +77,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
   // handle message arrived
 }
 
-
 void setup() {
   board.begin();
   Serial.begin(9600);
 
   while(!Serial);
-  Serial.println("data transfer of fake data\n");
 
   createNewDataFile();
 
@@ -92,67 +98,69 @@ void setup() {
   t.every(17 * SECOND, writeDataForSensorNine);
 
   // (3) data transfer to server
-  t.every(30 * SECOND, sendData);
+  t.every(40 * SECOND, sendData);
 
 }
 
 void createNewDataFile(){
   board.getTimestamp(unixTimestamp);
-  for (byte i=0; i<UNIX_TIMESTAMP_SIZE; i++) {
-    dataFilePath[LOG_PATH_TIMESTAMP + i] = char(unixTimestamp[i]);
+  for (byte i=0; i<TIMESTAMP_LENGTH; i++) {
+    dataFilePath[LOGPATH_TIMESTAMP_INDEX + i] = char(unixTimestamp[i]);
   }
   Serial.println("\ndataFilePath: " + String(dataFilePath));
   board.createFile(dataFilePath);
 }
 
 void writeDataForSensorOne() {
+  Serial.println(freeRam());
   if (checkCounter()) {
-    testSensorOne.collectData(dataFilePath, FILENAME_SIZE + 1, unixTimestamp, board);
+    testSensorOne.collectData(dataFilePath, FILENAME_LENGTH + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorTwo() {
   if (checkCounter()) {
-    testSensorTwo.collectData(dataFilePath, FILENAME_SIZE + 1, unixTimestamp, board);
+    testSensorTwo.collectData(dataFilePath, FILENAME_LENGTH + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorThree() {
   if (checkCounter()) {
-    testSensorThree.collectData(dataFilePath, FILENAME_SIZE + 1, unixTimestamp, board);
+    testSensorThree.collectData(dataFilePath, FILENAME_LENGTH + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorFour() {
   if (checkCounter()) {
-    testSensorFour.collectData(dataFilePath, FILENAME_SIZE + 1, unixTimestamp, board);
+    testSensorFour.collectData(dataFilePath, FILENAME_LENGTH + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorFive() {
   if (checkCounter()) {
-    testSensorFive.collectData(dataFilePath, FILENAME_SIZE + 1, unixTimestamp, board);
+    testSensorFive.collectData(dataFilePath, FILENAME_LENGTH + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorSix() {
   if (checkCounter()) {
-    testSensorSix.collectData(dataFilePath, FILENAME_SIZE + 1, unixTimestamp, board);
+    testSensorSix.collectData(dataFilePath, FILENAME_LENGTH + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorSeven() {
   if (checkCounter()) {
-    testSensorSeven.collectData(dataFilePath, FILENAME_SIZE + 1, unixTimestamp, board);
+    testSensorSeven.collectData(dataFilePath, FILENAME_LENGTH + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorEight() {
   if (checkCounter()) {
-    testSensorEight.collectData(dataFilePath, FILENAME_SIZE + 1, unixTimestamp, board);
+    testSensorEight.collectData(dataFilePath, FILENAME_LENGTH + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorNine() {
   if (checkCounter()) {
-    testSensorNine.collectData(dataFilePath, FILENAME_SIZE + 1, unixTimestamp, board);
+    testSensorNine.collectData(dataFilePath, FILENAME_LENGTH + 1, unixTimestamp, board);
   }
 }
 
 bool checkCounter() {
   Serial.print("dp" + String(dataPointCounter) + "-");
+  Serial.println(freeRam());
   boolean bol;
   if (dataPointCounter < DATAPOINT_MAX) {
     dataPointCounter ++;
@@ -160,6 +168,7 @@ bool checkCounter() {
   } else {
     relabelFile(dataFilePath, CLOSED_SUFFIX);
     // 2. create a new file with timestamped name
+    Serial.println("hurray!");
     createNewDataFile();
     bol = false;
     dataPointCounter = 0;
@@ -175,9 +184,9 @@ void loop () {
 
 // 3. Data Transfer to server
 void sendData() {
-  char sendFilePath[FILENAME_SIZE + 1] = LOG_PATH;
+  char sendFilePath[FILENAME_LENGTH + 1];
   Serial.println("Preparing to send data");
-  while (board.nextPathInDir(LOG_DIR, sendFilePath, CLOSED_SUFFIX)) {
+  while (board.nextPathInDir(LOGDIR, sendFilePath, CLOSED_SUFFIX)) {
     Serial.println("Checking file " + String(sendFilePath));
     Serial.println("file " + String(sendFilePath) + " is closed and ready to send!");
     char sendBuffer[board.fileSize(sendFilePath)]; // we can do this as all in one line?
@@ -205,16 +214,16 @@ void buildChecksum(const char* fName) {
   }
   checksum[BYTESUM_CHARLENGTH - 1] = ':';
 
-  for (byte i=0;i<UNIX_TIMESTAMP_SIZE;i++) {
-    checksum[BYTESUM_CHARLENGTH + i] = fName[LOG_PATH_TIMESTAMP + i];
+  for (byte i=0;i<TIMESTAMP_LENGTH;i++) {
+    checksum[BYTESUM_CHARLENGTH + i] = fName[LOGPATH_TIMESTAMP_INDEX + i];
   }
 }
 
-void relabelFile(char* oldName, char* label){
-  char newName[FILENAME_SIZE];
+void relabelFile(char* oldName, char* label) {
+  char newName[FILENAME_LENGTH + 1];
   strcpy(newName, oldName);
-  for (byte i=0; i<LABEL_SIZE; i++) {
-    newName[LOG_PATH_LABEL_INDEX + i] = label[i];
+  for (byte i=0; i<LABEL_LENGTH; i++) {
+    newName[LOGPATH_LABEL_INDEX + i] = label[i];
   }
   board.renameFile(oldName, newName);
 }
