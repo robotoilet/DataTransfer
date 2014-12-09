@@ -17,13 +17,12 @@
 
 #define UNIX_TIMESTAMP_SIZE 10
 
-#define LOG_PATH_LABEL LOG_PATH_TIMESTAMP + UNIX_TIMESTAMP_SIZE // where to write '.c'
+#define LOG_PATH_LABEL_INDEX LOG_PATH_TIMESTAMP + UNIX_TIMESTAMP_SIZE // where to write '.c'
                                                                 // or '.s'
 #define CLOSED_SUFFIX ".c"
 #define SENT_SUFFIX ".s"
 #define LABEL_SIZE 5
-#define FILENAME_SIZE LOG_PATH_LABEL + LABEL_SIZE
-
+#define FILENAME_SIZE LOG_PATH_LABEL_INDEX + LABEL_SIZE
 
 #define BYTESUM_CHARLENGTH 6
 #define CHECKSUM_LENGTH UNIX_TIMESTAMP_SIZE + BYTESUM_CHARLENGTH
@@ -159,7 +158,7 @@ bool checkCounter() {
     dataPointCounter ++;
     bol = true;
   } else {
-    board.relabelFile(dataFilePath, CLOSED_SUFFIX, LABEL_SIZE, LOG_PATH_LABEL);
+    relabelFile(dataFilePath, CLOSED_SUFFIX);
     // 2. create a new file with timestamped name
     createNewDataFile();
     bol = false;
@@ -179,8 +178,8 @@ void sendData() {
   char sendFilePath[FILENAME_SIZE + 1] = LOG_PATH;
   Serial.println("Preparing to send data");
   while (board.nextPathInDir(LOG_DIR, sendFilePath, CLOSED_SUFFIX)) {
-    //Serial.println("Checking file " + String(sendFilePath));
-    //Serial.println("file " + String(sendFilePath) + " is closed and ready to send!");
+    Serial.println("Checking file " + String(sendFilePath));
+    Serial.println("file " + String(sendFilePath) + " is closed and ready to send!");
     char sendBuffer[board.fileSize(sendFilePath)]; // we can do this as all in one line?
     board.readFile(sendFilePath, sendBuffer, checksumByteSum);
     buildChecksum(sendFilePath);
@@ -189,7 +188,7 @@ void sendData() {
     if (client.connect("siteX", "punterX", "punterX")) {
       Serial.println("Got a connection!");
       client.publish(checksum, sendBuffer);
-      board.relabelFile(sendFilePath, SENT_SUFFIX, LABEL_SIZE, LOG_PATH_LABEL);
+      relabelFile(sendFilePath, SENT_SUFFIX);
     }
   }
 }
@@ -211,3 +210,11 @@ void buildChecksum(const char* fName) {
   }
 }
 
+void relabelFile(char* oldName, char* label){
+  char newName[FILENAME_SIZE];
+  strcpy(newName, oldName);
+  for (byte i=0; i<LABEL_SIZE; i++) {
+    newName[LOG_PATH_LABEL_INDEX + i] = label[i];
+  }
+  board.renameFile(oldName, newName);
+}
