@@ -11,10 +11,13 @@
 #define MINUTE 60 * SECOND
 #define HOUR 60 * MINUTE
 
-#define LOGDIR  "/mnt/sda1"
-#define LOGPATH "/mnt/sda1/"
-#define LOGPATH_TIMESTAMP_INDEX sizeof(LOGDIR) // where to write the ts in the path
+#ifdef YUN
+  #define LOGDIR  "/mnt/sda1"
+  #define LOGPATH "/mnt/sda1/"
+#endif
+// TODO: define LOGDIR for UNO as empty?
 
+#define LOGPATH_TIMESTAMP_INDEX sizeof(LOGDIR) // where to write the ts in the path
 #define TIMESTAMP_LENGTH 10                    // number of chars of a unix ts
 
 #define LOGPATH_LABEL_INDEX LOGPATH_TIMESTAMP_INDEX + TIMESTAMP_LENGTH // where to write '.c'
@@ -23,7 +26,7 @@
 #define SENT_SUFFIX ".s"
 #define LABEL_LENGTH sizeof(CLOSED_SUFFIX)
 
-#define FILENAME_LENGTH LOGPATH_LABEL_INDEX + LABEL_LENGTH
+#define FILEPATH_LENGTH LOGPATH_LABEL_INDEX + LABEL_LENGTH
 
 #define BYTESUM_CHARLENGTH 6
 #define CHECKSUM_LENGTH TIMESTAMP_LENGTH + BYTESUM_CHARLENGTH
@@ -62,15 +65,12 @@ int freeRam ()
 
 // global vars
 
-char dataFilePath[FILENAME_LENGTH + 1] = LOGPATH;
+char dataFilePath[FILEPATH_LENGTH + 1] = LOGPATH;
 byte dataPointCounter = 0; // the number of dataPoints in one dataFile
 char unixTimestamp[TIMESTAMP_LENGTH + 1];    // a unix timestamp
 
 Timer t;                   // the timer starts processes at configured time
                            //   (process: e.g. 'get sensor reading')
-unsigned long checksumByteSum;
-char checksum[CHECKSUM_LENGTH];  // for our own 'checksum' calculation
-
 // TODO: remove if unused!
 void callback(char* topic, byte* payload, unsigned int length) {
   Serial.println("CALLBACK!!! topic: " + String(topic));
@@ -98,7 +98,7 @@ void setup() {
   t.every(17 * SECOND, writeDataForSensorNine);
 
   // (3) data transfer to server
-  t.every(40 * SECOND, sendData);
+  t.every(20 * SECOND, sendData);
 
 }
 
@@ -114,47 +114,47 @@ void createNewDataFile(){
 void writeDataForSensorOne() {
   Serial.println(freeRam());
   if (checkCounter()) {
-    testSensorOne.collectData(dataFilePath, FILENAME_LENGTH + 1, unixTimestamp, board);
+    testSensorOne.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorTwo() {
   if (checkCounter()) {
-    testSensorTwo.collectData(dataFilePath, FILENAME_LENGTH + 1, unixTimestamp, board);
+    testSensorTwo.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorThree() {
   if (checkCounter()) {
-    testSensorThree.collectData(dataFilePath, FILENAME_LENGTH + 1, unixTimestamp, board);
+    testSensorThree.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorFour() {
   if (checkCounter()) {
-    testSensorFour.collectData(dataFilePath, FILENAME_LENGTH + 1, unixTimestamp, board);
+    testSensorFour.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorFive() {
   if (checkCounter()) {
-    testSensorFive.collectData(dataFilePath, FILENAME_LENGTH + 1, unixTimestamp, board);
+    testSensorFive.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorSix() {
   if (checkCounter()) {
-    testSensorSix.collectData(dataFilePath, FILENAME_LENGTH + 1, unixTimestamp, board);
+    testSensorSix.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorSeven() {
   if (checkCounter()) {
-    testSensorSeven.collectData(dataFilePath, FILENAME_LENGTH + 1, unixTimestamp, board);
+    testSensorSeven.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorEight() {
   if (checkCounter()) {
-    testSensorEight.collectData(dataFilePath, FILENAME_LENGTH + 1, unixTimestamp, board);
+    testSensorEight.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
   }
 }
 void writeDataForSensorNine() {
   if (checkCounter()) {
-    testSensorNine.collectData(dataFilePath, FILENAME_LENGTH + 1, unixTimestamp, board);
+    testSensorNine.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
   }
 }
 
@@ -184,15 +184,18 @@ void loop () {
 
 // 3. Data Transfer to server
 void sendData() {
-  char sendFilePath[FILENAME_LENGTH + 1];
+  char sendFilePath[FILEPATH_LENGTH + 1];
   Serial.println("Preparing to send data");
-  while (board.nextPathInDir(LOGDIR, sendFilePath, CLOSED_SUFFIX)) {
-    Serial.println("Checking file " + String(sendFilePath));
-    Serial.println("file " + String(sendFilePath) + " is closed and ready to send!");
-    char sendBuffer[board.fileSize(sendFilePath)]; // we can do this as all in one line?
-    board.readFile(sendFilePath, sendBuffer, checksumByteSum);
-    buildChecksum(sendFilePath);
-    //Serial.println("Created checksum: " + String(checksum));
+  while (board.nextPathInDir(LOGDIR, sendFilePath, FILEPATH_LENGTH, CLOSED_SUFFIX, LABEL_LENGTH)) {
+    char sendBuffer[board.fileSize(sendFilePath)];
+
+    // checksumBytes: sum of all byte-values of the file
+    unsigned long checksumBytes = board.readFile(sendFilePath, sendBuffer);
+
+    char checksum[CHECKSUM_LENGTH] = {'\0'};
+    buildChecksum(sendFilePath, checksum, checksumBytes);
+    Serial.println("checksum: " + String(checksum));
+
     // try to send it..
     if (client.connect("siteX", "punterX", "punterX")) {
       Serial.println("Got a connection!");
@@ -202,10 +205,9 @@ void sendData() {
   }
 }
 
-// build a 'checksum' of format <checksumByteSum>:<timestamp of filename>
-void buildChecksum(const char* fName) {
-  checksum[0] = '\0';
-  String(checksumByteSum).toCharArray(checksum, BYTESUM_CHARLENGTH);
+// build a 'checksum' of format <checksumBytes>:<timestamp of filename>
+void buildChecksum(const char* fName, char* checksum, unsigned long checksumBytes) {
+  sprintf(checksum, "%ld", checksumBytes);
 
   // in case the bytesum is a digit less long then expected, we fill the
   // gap because otherwise the checksum wouldn't read as a whole
@@ -214,16 +216,19 @@ void buildChecksum(const char* fName) {
   }
   checksum[BYTESUM_CHARLENGTH - 1] = ':';
 
-  for (byte i=0;i<TIMESTAMP_LENGTH;i++) {
+  byte i = 0;
+  for (i;i<TIMESTAMP_LENGTH;i++) {
     checksum[BYTESUM_CHARLENGTH + i] = fName[LOGPATH_TIMESTAMP_INDEX + i];
   }
+  checksum[BYTESUM_CHARLENGTH + i] = '\0';
 }
 
 void relabelFile(char* oldName, char* label) {
-  char newName[FILENAME_LENGTH + 1];
+  char newName[FILEPATH_LENGTH + 1];
   strcpy(newName, oldName);
   for (byte i=0; i<LABEL_LENGTH; i++) {
-    newName[LOGPATH_LABEL_INDEX + i] = label[i];
+    newName[FILEPATH_LENGTH - 1 - i] = label[LABEL_LENGTH - 1 - i];
   }
   board.renameFile(oldName, newName);
+  Serial.println("newName: " + String(newName));
 }
