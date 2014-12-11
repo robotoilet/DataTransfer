@@ -34,6 +34,7 @@
 #define DATAPOINT_MAX 10
 
 byte server[] = { 10, 10, 63, 221 };  // WIFI-specifics
+//byte server[] = { 192, 168, 0, 7 };  // WIFI-specifics
 
 #ifdef YUN
   #include "YunBoard.h"
@@ -55,12 +56,11 @@ byte server[] = { 10, 10, 63, 221 };  // WIFI-specifics
   TestSensor<YunBoard> testSensorNine('9'); // create TestSensor with it's UID
 #endif
 
-// check our RAM
-int freeRam () 
-{
-    extern int __heap_start, *__brkval; 
-      int v; 
-        return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
+// helper function to check our RAM
+int freeRam () {
+  extern int __heap_start, *__brkval;
+  int v;
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval);
 }
 
 // global vars
@@ -112,7 +112,6 @@ void createNewDataFile(){
 }
 
 void writeDataForSensorOne() {
-  Serial.println(freeRam());
   if (checkCounter()) {
     testSensorOne.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
   }
@@ -160,7 +159,6 @@ void writeDataForSensorNine() {
 
 bool checkCounter() {
   Serial.print("dp" + String(dataPointCounter) + "-");
-  Serial.println(freeRam());
   boolean bol;
   if (dataPointCounter < DATAPOINT_MAX) {
     dataPointCounter ++;
@@ -168,7 +166,6 @@ bool checkCounter() {
   } else {
     relabelFile(dataFilePath, CLOSED_SUFFIX);
     // 2. create a new file with timestamped name
-    Serial.println("hurray!");
     createNewDataFile();
     bol = false;
     dataPointCounter = 0;
@@ -189,38 +186,36 @@ void sendData() {
   while (board.nextPathInDir(LOGDIR, sendFilePath, FILEPATH_LENGTH, CLOSED_SUFFIX, LABEL_LENGTH)) {
     char sendBuffer[board.fileSize(sendFilePath)];
 
+    char checksum[CHECKSUM_LENGTH] = {'\0'};
+    char startEnd[10];
     // checksumBytes: sum of all byte-values of the file
     unsigned long checksumBytes = board.readFile(sendFilePath, sendBuffer);
+    unsigned int bufferLength = strlen(sendBuffer);
 
-    char checksum[CHECKSUM_LENGTH] = {'\0'};
-    buildChecksum(sendFilePath, checksum, checksumBytes);
-    Serial.println("checksum: " + String(checksum));
+    buildChecksum(checksum, sendBuffer, bufferLength, checksumBytes);
 
     // try to send it..
     if (client.connect("siteX", "punterX", "punterX")) {
-      Serial.println("Got a connection!");
-      client.publish(checksum, sendBuffer);
+      Serial.println("Got a connection! sendBufferLength: " + bufferLength);
+      client.publish(checksum, (uint8_t*)sendBuffer, bufferLength);
+      Serial.println("should have sent the stuff by now..");
       relabelFile(sendFilePath, SENT_SUFFIX);
+    } else {
+      Serial.println("Didn't get a connection!");
     }
   }
 }
 
-// build a 'checksum' of format <checksumBytes>:<timestamp of filename>
-void buildChecksum(const char* fName, char* checksum, unsigned long checksumBytes) {
-  sprintf(checksum, "%ld", checksumBytes);
-
-  // in case the bytesum is a digit less long then expected, we fill the
-  // gap because otherwise the checksum wouldn't read as a whole
-  if (checksum[BYTESUM_CHARLENGTH - 2] == '\0') {
-    checksum[BYTESUM_CHARLENGTH - 2] = ':';
+void buildChecksum(char* checksum, char* buffer, unsigned int bufferLength, unsigned long bytes) {
+  sprintf(checksum, "%ld", bytes);
+  for (byte i=strlen(checksum); i<CHECKSUM_LENGTH; i++) {
+    if (i < BYTESUM_CHARLENGTH) {
+      checksum[i] = ':';
+    } else {
+      checksum[i] = buffer[bufferLength - (CHECKSUM_LENGTH - i)];
+    }
   }
-  checksum[BYTESUM_CHARLENGTH - 1] = ':';
-
-  byte i = 0;
-  for (i;i<TIMESTAMP_LENGTH;i++) {
-    checksum[BYTESUM_CHARLENGTH + i] = fName[LOGPATH_TIMESTAMP_INDEX + i];
-  }
-  checksum[BYTESUM_CHARLENGTH + i] = '\0';
+  checksum[CHECKSUM_LENGTH] = '\0';
 }
 
 void relabelFile(char* oldName, char* label) {
