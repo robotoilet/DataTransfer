@@ -184,9 +184,10 @@ void sendData() {
   char sendFilePath[FILEPATH_LENGTH + 1];
   Serial.println("Preparing to send data");
   while (board.nextPathInDir(LOGDIR, sendFilePath, FILEPATH_LENGTH, CLOSED_SUFFIX, LABEL_LENGTH)) {
+    Serial.println("..for file " + String(sendFilePath));
     char sendBuffer[board.fileSize(sendFilePath)];
 
-    char checksum[CHECKSUM_LENGTH] = {'\0'};
+    char checksum[CHECKSUM_LENGTH + 1] = {'\0'};
     char startEnd[10];
     // checksumBytes: sum of all byte-values of the file
     unsigned long checksumBytes = board.readFile(sendFilePath, sendBuffer);
@@ -194,9 +195,11 @@ void sendData() {
 
     buildChecksum(checksum, sendBuffer, bufferLength, checksumBytes);
 
-    // try to send it..
+    Serial.println("trying to send it..");
     if (client.connect("siteX", "punterX", "punterX")) {
-      Serial.println("Got a connection! sendBufferLength: " + bufferLength);
+      Serial.println("Got a connection! sendBufferLength: " + String(bufferLength));
+      Serial.println("..checksum: " + String(checksum));
+      Serial.println("sendBuffer: " + String(sendBuffer));
       client.publish(checksum, (uint8_t*)sendBuffer, bufferLength);
       Serial.println("should have sent the stuff by now..");
       relabelFile(sendFilePath, SENT_SUFFIX);
