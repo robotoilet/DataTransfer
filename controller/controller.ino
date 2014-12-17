@@ -17,26 +17,26 @@
 #ifdef YUN
   #define LOGDIR  "/mnt/sda1"
   #define LOGPATH "/mnt/sda1/"
-  #define LOGPATH_TIMESTAMP_INDEX sizeof(LOGDIR) // where to write the ts in the path
 #endif
 
 #ifdef UNO
   #define LOGDIR ""
   #define LOGPATH ""
-  #define LOGPATH_TIMESTAMP_INDEX 0 // where to write the ts in the path
-
 #endif
 
 #define TIMESTAMP_LENGTH 10                    // number of chars of a unix ts
-
+#define LOGPATH_TIMESTAMP_INDEX sizeof(LOGDIR) - 1 // where to write the ts in the path
 #define LOGPATH_LABEL_INDEX LOGPATH_TIMESTAMP_INDEX + TIMESTAMP_LENGTH // where to write '.c'
                                                                        // or '.s'
 #define CLOSED_SUFFIX "C"
 #define SENT_SUFFIX "S"
 #define LOG_SUFFIX "L"
-#define LABEL_LENGTH sizeof(CLOSED_SUFFIX)
+#define DOT "."
 
-#define FILEPATH_LENGTH LOGPATH_LABEL_INDEX + LABEL_LENGTH
+#define DOT_LENGTH sizeof(DOT) -1
+#define LABEL_LENGTH sizeof(CLOSED_SUFFIX) - 1
+
+#define FILEPATH_LENGTH LOGPATH_LABEL_INDEX + DOT_LENGTH + LABEL_LENGTH
 
 #define BYTESUM_CHARLENGTH 6
 #define CHECKSUM_LENGTH TIMESTAMP_LENGTH + BYTESUM_CHARLENGTH
