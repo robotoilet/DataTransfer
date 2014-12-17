@@ -1,11 +1,14 @@
-#define YUN
+//#define YUN
+#define UNO
 
 #include "Timer.h"
 #include "TestSensor.h"
 
-// for MQTT stuff
-#include <SPI.h>
-#include <PubSubClient.h>
+#ifdef YUN
+  // for MQTT stuff
+  #include <SPI.h>
+  #include <PubSubClient.h>
+#endif
 
 #define SECOND 1000L
 #define MINUTE 60 * SECOND
@@ -14,16 +17,23 @@
 #ifdef YUN
   #define LOGDIR  "/mnt/sda1"
   #define LOGPATH "/mnt/sda1/"
+  #define LOGPATH_TIMESTAMP_INDEX sizeof(LOGDIR) // where to write the ts in the path
 #endif
-// TODO: define LOGDIR for UNO as empty?
 
-#define LOGPATH_TIMESTAMP_INDEX sizeof(LOGDIR) // where to write the ts in the path
+#ifdef UNO
+  #define LOGDIR ""
+  #define LOGPATH ""
+  #define LOGPATH_TIMESTAMP_INDEX 0 // where to write the ts in the path
+
+#endif
+
 #define TIMESTAMP_LENGTH 10                    // number of chars of a unix ts
 
 #define LOGPATH_LABEL_INDEX LOGPATH_TIMESTAMP_INDEX + TIMESTAMP_LENGTH // where to write '.c'
                                                                        // or '.s'
-#define CLOSED_SUFFIX ".c"
-#define SENT_SUFFIX ".s"
+#define CLOSED_SUFFIX "C"
+#define SENT_SUFFIX "S"
+#define LOG_SUFFIX "L"
 #define LABEL_LENGTH sizeof(CLOSED_SUFFIX)
 
 #define FILEPATH_LENGTH LOGPATH_LABEL_INDEX + LABEL_LENGTH
@@ -56,13 +66,37 @@ byte server[] = { 192, 168, 0, 7 };  // WIFI-specifics
   TestSensor<YunBoard> testSensorNine('9'); // create TestSensor with it's UID
 #endif
 
+#ifdef UNO
+  #include "UnoBoard.h"
+  #include <SdFat.h>
+  #include <Wire.h>
+  #include "RTClib.h"
+  UnoBoard board; // change this to your board
+
+
+
+  // the actural sensors this sketch knows about
+  TestSensor<UnoBoard> testSensorOne('1'); // create TestSensor with it's UID
+  TestSensor<UnoBoard> testSensorTwo('2'); // create TestSensor with it's UID
+  TestSensor<UnoBoard> testSensorThree('3'); // create TestSensor with it's UID
+  TestSensor<UnoBoard> testSensorFour('4'); // create TestSensor with it's UID
+  TestSensor<UnoBoard> testSensorFive('5'); // create TestSensor with it's UID
+  TestSensor<UnoBoard> testSensorSix('6'); // create TestSensor with it's UID
+  TestSensor<UnoBoard> testSensorSeven('7'); // create TestSensor with it's UID
+  TestSensor<UnoBoard> testSensorEight('8'); // create TestSensor with it's UID
+  TestSensor<UnoBoard> testSensorNine('9'); // create TestSensor with it's UID
+#endif
+
+
+
+#ifdef YUN
 // helper function to check our RAM
 int freeRam () {
   extern int __heap_start, *__brkval;
   int v;
   return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval);
 }
-
+#endif
 // global vars
 
 char dataFilePath[FILEPATH_LENGTH + 1] = LOGPATH;
@@ -104,11 +138,23 @@ void setup() {
 
 void createNewDataFile(){
   board.getTimestamp(unixTimestamp);
-  for (byte i=0; i<TIMESTAMP_LENGTH; i++) {
-    dataFilePath[LOGPATH_TIMESTAMP_INDEX + i] = char(unixTimestamp[i]);
+  Serial.println("timeStamp " + String(unixTimestamp));
+  byte i = 0;
+  for (i; i<TIMESTAMP_LENGTH +1; i++) {
+    if (i == 8) {
+      dataFilePath[LOGPATH_TIMESTAMP_INDEX +i] = '.';
+    } else if (i > 8) {
+      dataFilePath[LOGPATH_TIMESTAMP_INDEX + i] = char(unixTimestamp[i-1]);
+    } else {
+      dataFilePath[LOGPATH_TIMESTAMP_INDEX + i] = char(unixTimestamp[i]);
+    }
   }
+  dataFilePath[i] = '\0';
+  strcat(dataFilePath, LOG_SUFFIX);
+
   Serial.println("\ndataFilePath: " + String(dataFilePath));
   board.createFile(dataFilePath);
+
 }
 
 void writeDataForSensorOne() {
