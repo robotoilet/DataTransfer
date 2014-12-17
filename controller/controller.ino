@@ -1,27 +1,38 @@
-//#define YUN
-#define UNO
+#define YUN
+//#define UNO
 
 #include "Timer.h"
 #include "TestSensor.h"
-
-#ifdef YUN
-  // for MQTT stuff
-  #include <SPI.h>
-  #include <PubSubClient.h>
-#endif
+#include <PubSubClient.h>
 
 #define SECOND 1000L
 #define MINUTE 60 * SECOND
 #define HOUR 60 * MINUTE
 
 #ifdef YUN
+  #include <SPI.h>
+  #include "YunBoard.h"
+  #include <YunClient.h>
+
   #define LOGDIR  "/mnt/sda1"
   #define LOGPATH "/mnt/sda1/"
+  #define BOARD_TYPE YunBoard
+
+  YunClient eClient;
 #endif
 
 #ifdef UNO
+  #include <SdFat.h>
+  #include "UnoBoard.h"
+  #include <Wire.h>
+  #include "RTClib.h"
+  #include "Ethernet.h"
+
   #define LOGDIR ""
   #define LOGPATH ""
+  #define BOARD_TYPE UnoBoard
+
+  EthernetClient eClient;
 #endif
 
 #define TIMESTAMP_LENGTH 10                    // number of chars of a unix ts
@@ -46,58 +57,20 @@
 //byte server[] = { 10, 10, 63, 221 };  // WIFI-specifics
 byte server[] = { 192, 168, 0, 7 };  // WIFI-specifics
 
-#ifdef YUN
-  #include "YunBoard.h"
-  #include <YunClient.h>
-  YunBoard board; // change this to your board
+BOARD_TYPE board;
 
-  YunClient yunClient;
-  PubSubClient client(server, 1883, callback, yunClient);
+// the actural sensors this sketch knows about
+TestSensor<BOARD_TYPE> testSensorOne('1'); // create TestSensor with it's UID
+TestSensor<BOARD_TYPE> testSensorTwo('2'); // create TestSensor with it's UID
+TestSensor<BOARD_TYPE> testSensorThree('3'); // create TestSensor with it's UID
+TestSensor<BOARD_TYPE> testSensorFour('4'); // create TestSensor with it's UID
+TestSensor<BOARD_TYPE> testSensorFive('5'); // create TestSensor with it's UID
+TestSensor<BOARD_TYPE> testSensorSix('6'); // create TestSensor with it's UID
+TestSensor<BOARD_TYPE> testSensorSeven('7'); // create TestSensor with it's UID
+TestSensor<BOARD_TYPE> testSensorEight('8'); // create TestSensor with it's UID
+TestSensor<BOARD_TYPE> testSensorNine('9'); // create TestSensor with it's UID
 
-  // the actural sensors this sketch knows about
-  TestSensor<YunBoard> testSensorOne('1'); // create TestSensor with it's UID
-  TestSensor<YunBoard> testSensorTwo('2'); // create TestSensor with it's UID
-  TestSensor<YunBoard> testSensorThree('3'); // create TestSensor with it's UID
-  TestSensor<YunBoard> testSensorFour('4'); // create TestSensor with it's UID
-  TestSensor<YunBoard> testSensorFive('5'); // create TestSensor with it's UID
-  TestSensor<YunBoard> testSensorSix('6'); // create TestSensor with it's UID
-  TestSensor<YunBoard> testSensorSeven('7'); // create TestSensor with it's UID
-  TestSensor<YunBoard> testSensorEight('8'); // create TestSensor with it's UID
-  TestSensor<YunBoard> testSensorNine('9'); // create TestSensor with it's UID
-#endif
-
-#ifdef UNO
-  #include "UnoBoard.h"
-  #include <SdFat.h>
-  #include <Wire.h>
-  #include "RTClib.h"
-  UnoBoard board; // change this to your board
-
-
-
-  // the actural sensors this sketch knows about
-  TestSensor<UnoBoard> testSensorOne('1'); // create TestSensor with it's UID
-  TestSensor<UnoBoard> testSensorTwo('2'); // create TestSensor with it's UID
-  TestSensor<UnoBoard> testSensorThree('3'); // create TestSensor with it's UID
-  TestSensor<UnoBoard> testSensorFour('4'); // create TestSensor with it's UID
-  TestSensor<UnoBoard> testSensorFive('5'); // create TestSensor with it's UID
-  TestSensor<UnoBoard> testSensorSix('6'); // create TestSensor with it's UID
-  TestSensor<UnoBoard> testSensorSeven('7'); // create TestSensor with it's UID
-  TestSensor<UnoBoard> testSensorEight('8'); // create TestSensor with it's UID
-  TestSensor<UnoBoard> testSensorNine('9'); // create TestSensor with it's UID
-#endif
-
-
-
-#ifdef YUN
-// helper function to check our RAM
-int freeRam () {
-  extern int __heap_start, *__brkval;
-  int v;
-  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval);
-}
-#endif
-// global vars
+PubSubClient client(server, 1883, callback, eClient);
 
 char dataFilePath[FILEPATH_LENGTH + 1] = LOGPATH;
 byte dataPointCounter = 0; // the number of dataPoints in one dataFile
@@ -105,6 +78,7 @@ char unixTimestamp[TIMESTAMP_LENGTH + 1];    // a unix timestamp
 
 Timer t;                   // the timer starts processes at configured time
                            //   (process: e.g. 'get sensor reading')
+
 // TODO: remove if unused!
 void callback(char* topic, byte* payload, unsigned int length) {
   Serial.println("CALLBACK!!! topic: " + String(topic));
@@ -159,47 +133,47 @@ void createNewDataFile(){
 
 void writeDataForSensorOne() {
   if (checkCounter()) {
-    testSensorOne.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
+    testSensorOne.collectData(dataFilePath, unixTimestamp, board);
   }
 }
 void writeDataForSensorTwo() {
   if (checkCounter()) {
-    testSensorTwo.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
+    testSensorTwo.collectData(dataFilePath, unixTimestamp, board);
   }
 }
 void writeDataForSensorThree() {
   if (checkCounter()) {
-    testSensorThree.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
+    testSensorThree.collectData(dataFilePath, unixTimestamp, board);
   }
 }
 void writeDataForSensorFour() {
   if (checkCounter()) {
-    testSensorFour.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
+    testSensorFour.collectData(dataFilePath, unixTimestamp, board);
   }
 }
 void writeDataForSensorFive() {
   if (checkCounter()) {
-    testSensorFive.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
+    testSensorFive.collectData(dataFilePath, unixTimestamp, board);
   }
 }
 void writeDataForSensorSix() {
   if (checkCounter()) {
-    testSensorSix.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
+    testSensorSix.collectData(dataFilePath, unixTimestamp, board);
   }
 }
 void writeDataForSensorSeven() {
   if (checkCounter()) {
-    testSensorSeven.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
+    testSensorSeven.collectData(dataFilePath, unixTimestamp, board);
   }
 }
 void writeDataForSensorEight() {
   if (checkCounter()) {
-    testSensorEight.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
+    testSensorEight.collectData(dataFilePath, unixTimestamp, board);
   }
 }
 void writeDataForSensorNine() {
   if (checkCounter()) {
-    testSensorNine.collectData(dataFilePath, FILEPATH_LENGTH + 1, unixTimestamp, board);
+    testSensorNine.collectData(dataFilePath, unixTimestamp, board);
   }
 }
 
@@ -227,9 +201,9 @@ void loop () {
 
 // 3. Data Transfer to server
 void sendData() {
-  char sendFilePath[FILEPATH_LENGTH + 1];
+  char sendFilePath[FILEPATH_LENGTH + 1] = LOGDIR;
   Serial.println("Preparing to send data");
-  while (board.nextPathInDir(LOGDIR, sendFilePath, FILEPATH_LENGTH, CLOSED_SUFFIX, LABEL_LENGTH)) {
+  while (board.nextPathInDir(sendFilePath, CLOSED_SUFFIX)) {
     Serial.println("..for file " + String(sendFilePath));
     unsigned int bufferLength = board.fileSize(sendFilePath);
     char sendBuffer[bufferLength + 1];
