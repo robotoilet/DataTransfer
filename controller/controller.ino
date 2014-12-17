@@ -31,10 +31,10 @@
 #define BYTESUM_CHARLENGTH 6
 #define CHECKSUM_LENGTH TIMESTAMP_LENGTH + BYTESUM_CHARLENGTH
 
-#define DATAPOINT_MAX 10
+#define DATAPOINT_MAX 2
 
-byte server[] = { 10, 10, 63, 221 };  // WIFI-specifics
-//byte server[] = { 192, 168, 0, 7 };  // WIFI-specifics
+//byte server[] = { 10, 10, 63, 221 };  // WIFI-specifics
+byte server[] = { 192, 168, 0, 7 };  // WIFI-specifics
 
 #ifdef YUN
   #include "YunBoard.h"
@@ -98,7 +98,7 @@ void setup() {
   t.every(17 * SECOND, writeDataForSensorNine);
 
   // (3) data transfer to server
-  t.every(20 * SECOND, sendData);
+  t.every(10 * SECOND, sendData);
 
 }
 
@@ -185,24 +185,23 @@ void sendData() {
   Serial.println("Preparing to send data");
   while (board.nextPathInDir(LOGDIR, sendFilePath, FILEPATH_LENGTH, CLOSED_SUFFIX, LABEL_LENGTH)) {
     Serial.println("..for file " + String(sendFilePath));
-    char sendBuffer[board.fileSize(sendFilePath)];
+    unsigned int bufferLength = board.fileSize(sendFilePath);
+    char sendBuffer[bufferLength + 1];
 
     char checksum[CHECKSUM_LENGTH + 1] = {'\0'};
     char startEnd[10];
     // checksumBytes: sum of all byte-values of the file
     unsigned long checksumBytes = board.readFile(sendFilePath, sendBuffer);
-    unsigned int bufferLength = strlen(sendBuffer);
 
     buildChecksum(checksum, sendBuffer, bufferLength, checksumBytes);
 
     Serial.println("trying to send it..");
     if (client.connect("siteX", "punterX", "punterX")) {
-      Serial.println("Got a connection! sendBufferLength: " + String(bufferLength));
-      Serial.println("..checksum: " + String(checksum));
-      Serial.println("sendBuffer: " + String(sendBuffer));
-      client.publish(checksum, (uint8_t*)sendBuffer, bufferLength);
-      Serial.println("should have sent the stuff by now..");
-      relabelFile(sendFilePath, SENT_SUFFIX);
+      Serial.println("Got a connection!");
+      if (client.publish(checksum, sendBuffer)) {
+        Serial.println("should have sent the stuff by now..");
+        relabelFile(sendFilePath, SENT_SUFFIX);
+      }
     } else {
       Serial.println("Didn't get a connection!");
     }
