@@ -42,8 +42,8 @@
 #define CLOSED_SUFFIX "C"
 #define SENT_SUFFIX "S"
 #define LOG_SUFFIX "L"
-#define DOT "."
 
+#define DOT "."
 #define DOT_LENGTH sizeof(DOT) -1
 #define LABEL_LENGTH sizeof(CLOSED_SUFFIX) - 1
 
@@ -57,24 +57,16 @@
 //byte server[] = { 10, 10, 63, 221 };  // WIFI-specifics
 byte server[] = { 192, 168, 0, 7 };  // WIFI-specifics
 
-BOARD_TYPE board;
+BOARD_TYPE board(DATAPOINT_MAX);
 
 // the actural sensors this sketch knows about
-TestSensor<BOARD_TYPE> testSensorOne('1'); // create TestSensor with it's UID
-TestSensor<BOARD_TYPE> testSensorTwo('2'); // create TestSensor with it's UID
-TestSensor<BOARD_TYPE> testSensorThree('3'); // create TestSensor with it's UID
-TestSensor<BOARD_TYPE> testSensorFour('4'); // create TestSensor with it's UID
-TestSensor<BOARD_TYPE> testSensorFive('5'); // create TestSensor with it's UID
-TestSensor<BOARD_TYPE> testSensorSix('6'); // create TestSensor with it's UID
-TestSensor<BOARD_TYPE> testSensorSeven('7'); // create TestSensor with it's UID
-TestSensor<BOARD_TYPE> testSensorEight('8'); // create TestSensor with it's UID
-TestSensor<BOARD_TYPE> testSensorNine('9'); // create TestSensor with it's UID
+TestSensor<BOARD_TYPE> testSensorOne('1', &board); // create TestSensor with it's UID
+TestSensor<BOARD_TYPE> testSensorTwo('2', &board); // create TestSensor with it's UID
+TestSensor<BOARD_TYPE> testSensorThree('3', &board); // create TestSensor with it's UID
 
 PubSubClient client(server, 1883, callback, eClient);
 
-char dataFilePath[FILEPATH_LENGTH + 1] = LOGPATH;
 byte dataPointCounter = 0; // the number of dataPoints in one dataFile
-char unixTimestamp[TIMESTAMP_LENGTH + 1];    // a unix timestamp
 
 Timer t;                   // the timer starts processes at configured time
                            //   (process: e.g. 'get sensor reading')
@@ -91,108 +83,28 @@ void setup() {
 
   while(!Serial);
 
-  createNewDataFile();
+  board.createNewDataFile();
 
   // task scheduling..
   // (1) sensor data collection and logging
   t.every(5 * SECOND, writeDataForSensorOne);
   t.every(10 * SECOND, writeDataForSensorTwo);
   t.every(11 * SECOND, writeDataForSensorThree);
-  t.every(12 * SECOND, writeDataForSensorFour);
-  t.every(13 * SECOND, writeDataForSensorFive);
-  t.every(14 * SECOND, writeDataForSensorSix);
-  t.every(15 * SECOND, writeDataForSensorSeven);
-  t.every(16 * SECOND, writeDataForSensorEight);
-  t.every(17 * SECOND, writeDataForSensorNine);
 
-  // (3) data transfer to server
-  t.every(10 * SECOND, sendData);
+  // (2) data transfer to server
+//  t.every(10 * SECOND, sendData);
 
 }
 
-void createNewDataFile(){
-  board.getTimestamp(unixTimestamp);
-  Serial.println("timeStamp " + String(unixTimestamp));
-  byte i = 0;
-  for (i; i<TIMESTAMP_LENGTH +1; i++) {
-    if (i == 8) {
-      dataFilePath[LOGPATH_TIMESTAMP_INDEX +i] = '.';
-    } else if (i > 8) {
-      dataFilePath[LOGPATH_TIMESTAMP_INDEX + i] = char(unixTimestamp[i-1]);
-    } else {
-      dataFilePath[LOGPATH_TIMESTAMP_INDEX + i] = char(unixTimestamp[i]);
-    }
-  }
-  dataFilePath[i] = '\0';
-  strcat(dataFilePath, LOG_SUFFIX);
-
-  Serial.println("\ndataFilePath: " + String(dataFilePath));
-  board.createFile(dataFilePath);
-
-}
 
 void writeDataForSensorOne() {
-  if (checkCounter()) {
-    testSensorOne.collectData(dataFilePath, unixTimestamp, board);
-  }
+  testSensorOne.collectData();
 }
 void writeDataForSensorTwo() {
-  if (checkCounter()) {
-    testSensorTwo.collectData(dataFilePath, unixTimestamp, board);
-  }
+  testSensorTwo.collectData();
 }
 void writeDataForSensorThree() {
-  if (checkCounter()) {
-    testSensorThree.collectData(dataFilePath, unixTimestamp, board);
-  }
-}
-void writeDataForSensorFour() {
-  if (checkCounter()) {
-    testSensorFour.collectData(dataFilePath, unixTimestamp, board);
-  }
-}
-void writeDataForSensorFive() {
-  if (checkCounter()) {
-    testSensorFive.collectData(dataFilePath, unixTimestamp, board);
-  }
-}
-void writeDataForSensorSix() {
-  if (checkCounter()) {
-    testSensorSix.collectData(dataFilePath, unixTimestamp, board);
-  }
-}
-void writeDataForSensorSeven() {
-  if (checkCounter()) {
-    testSensorSeven.collectData(dataFilePath, unixTimestamp, board);
-  }
-}
-void writeDataForSensorEight() {
-  if (checkCounter()) {
-    testSensorEight.collectData(dataFilePath, unixTimestamp, board);
-  }
-}
-void writeDataForSensorNine() {
-  if (checkCounter()) {
-    testSensorNine.collectData(dataFilePath, unixTimestamp, board);
-  }
-}
-
-bool checkCounter() {
-  Serial.print("dp" + String(dataPointCounter) + "-");
-  boolean bol;
-  if (dataPointCounter < DATAPOINT_MAX) {
-    dataPointCounter ++;
-    bol = true;
-  } else {
-    relabelFile(dataFilePath, CLOSED_SUFFIX);
-    // 2. create a new file with timestamped name
-    createNewDataFile();
-    bol = false;
-    dataPointCounter = 0;
-  }
-  // in any case get a current timestamp to pass on to sensor(s)
-  board.getTimestamp(unixTimestamp);
-  return bol;
+  testSensorThree.collectData();
 }
 
 void loop () {
@@ -220,7 +132,7 @@ void sendData() {
       Serial.println("Got a connection!");
       if (client.publish(checksum, sendBuffer)) {
         Serial.println("should have sent the stuff by now..");
-        relabelFile(sendFilePath, SENT_SUFFIX);
+        board.relabelFile(sendFilePath, SENT_SUFFIX);
       }
     } else {
       Serial.println("Didn't get a connection!");
@@ -238,14 +150,4 @@ void buildChecksum(char* checksum, char* buffer, unsigned int bufferLength, unsi
     }
   }
   checksum[CHECKSUM_LENGTH] = '\0';
-}
-
-void relabelFile(char* oldName, char* label) {
-  char newName[FILEPATH_LENGTH + 1];
-  strcpy(newName, oldName);
-  for (byte i=0; i<LABEL_LENGTH; i++) {
-    newName[FILEPATH_LENGTH - 1 - i] = label[LABEL_LENGTH - 1 - i];
-  }
-  board.renameFile(oldName, newName);
-  Serial.println("newName: " + String(newName));
 }
