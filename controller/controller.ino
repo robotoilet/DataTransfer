@@ -1,5 +1,5 @@
-#define YUN
-//#define UNO
+//#define YUN
+#define UNO
 
 #include "Timer.h"
 #include "TestSensor.h"
@@ -21,11 +21,7 @@
   #include "UnoBoard.h"
   #include <Wire.h>
   #include "RTClib.h"
-  #include "Ethernet.h"
-
   #define BOARD_TYPE UnoBoard
-
-  EthernetClient eClient;
 #endif
 
 #define DATAPOINT_MAX 5
