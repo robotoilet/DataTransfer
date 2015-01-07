@@ -1,35 +1,33 @@
-//#define YUN
-#define UNO
-
-#define SECOND 1000L
-#define MINUTE 60 * SECOND
-#define HOUR 60 * MINUTE
-
-#ifdef YUN
-  #include "YunClient.h"
-  #include "SPI.h"
-  #include "YunBoard.h"
-  #define BOARD_TYPE YunBoard
-#endif
-
-#ifdef UNO
-  #include <SdFat.h>
-  #include "UnoBoard.h"
-  #include <Wire.h>
-  #include "RTClib.h"
-  #define BOARD_TYPE UnoBoard
-#endif
+#include <SdFat.h>
+#include <Wire.h>
+#include "RTClib.h"
 
 #define DATAPOINT_MAX 5
-#define MAX_DATAPOINT_SIZE 23
 
-#define COLLECTOR 1
-#define STORAGE 2
-#define TRANSMITTER 3
+#define CLOSED_SUFFIX 'C'
+#define SENT_SUFFIX "S"
+#define LOG_SUFFIX "L"
 
-BOARD_TYPE board(DATAPOINT_MAX);
+#define LABEL_LENGTH 1
+
+#define DOT '.'
+#define DOT_LENGTH 1
+
+#define TIMESTAMP_LENGTH 10                    // number of chars of a unix ts
+#define FILEPATH_LENGTH TIMESTAMP_LENGTH + DOT_LENGTH + LABEL_LENGTH
+
+#define COLLECTOR 0x1
+#define STORAGE 0x2
+#define TRANSMITTER 0x3
+
+#define CHIP_SELECT 10
+SdFat sd;
+
+RTC_DS1307 rtc;
 
 byte dataPointCounter = 0; // the number of dataPoints in one dataFile
+
+char filePath[FILEPATH_LENGTH + 1];
 
 // uncomment to inspect for memory leaks (call this function where leaks suspected):
 int freeRam () {
@@ -37,28 +35,73 @@ int freeRam () {
   int v;
   return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval);
 }
+void reportFreeRam() {
+  Serial.println("Free Ram : " + String(freeRam()));
+}
 
-void collectData() {
+void setup() {
+  Serial.begin(9600);
+  Wire.begin(STORAGE);
+  sd.begin(CHIP_SELECT, SPI_HALF_SPEED);
+  createNewDataFile();
+  Wire.onReceive(writeDataPoint);
+}
 
-// TODO: byte dataPointCounter = 0; // the number of dataPoints in one dataFile
-  // TODO: if (b->checkCounter()) {
+void createNewDataFile(){
+  filePath[0] = '\0';
+  char unixTimestamp[TIMESTAMP_LENGTH + 1];
+  sprintf(unixTimestamp, "%ld", rtc.now().unixtime());
+  Serial.println("ts for filename: " + String(unixTimestamp));
 
-  // TODO: b->write(dataPoint, MAX_DATAPOINT_SIZE);
-
-  Wire.requestFrom(COLLECTOR, MAX_DATAPOINT_SIZE);
-  char dataPoint[MAX_DATAPOINT_SIZE];
   byte i = 0;
-  while (Wire.available() > 0) {
-    char c = Wire.read(); // receive a byte as character
-    if (c == '!') break; // nada to retrieve; end this round of data collection
-    if ((byte)c == 255) {// end of string, finish datapoint & try to get more
-      dataPoint[i] = '\0';
-      board.write(dataPoint); 
-      Serial.print("just wrote datpoint " + String(dataPoint));
-      collectData(); 
+  byte k = 0;
+  for (i;i<FILEPATH_LENGTH;i++) {
+    if (k == 8) { filePath[i] = DOT;
+    } else if (k < 8) {
+      filePath[i] = unixTimestamp[k];
+    } else {
+      filePath[i] = unixTimestamp[k - 1];
     }
-    dataPoint[i] = c;
-    i++;
+    k++;
+  }
+  filePath[i] = '\0';
+  strcat(filePath, LOG_SUFFIX);
+  SdFile f(filePath, O_CREAT | O_WRITE | O_EXCL);
+  f.close();
+  Serial.println("created new file: " + String(filePath));
+}
+
+void writeDataPoint(int size) {
+  checkCounter();
+  SdFile f;
+  if(!f.open(filePath, O_RDWR | O_CREAT | O_AT_END)) {
+    Serial.println(F("Error writing file"));
+  }
+  while (Wire.available() > 0) {
+    char c = Wire.read();
+    f.print(c);
+    Serial.print(c);
+  }
+  f.close();
+  Serial.println();
+}
+
+bool checkCounter() {
+  reportFreeRam();
+  Serial.print(dataPointCounter);
+  if (dataPointCounter < DATAPOINT_MAX) {
+    dataPointCounter ++;
+    return true;
+  } else {
+    // 1. relabel file to say it's closed
+    SdFile f(filePath, O_CREAT | O_WRITE );   //init file
+    filePath[FILEPATH_LENGTH - 1] = CLOSED_SUFFIX;
+    if (!f.rename(sd.vwd(), filePath)) Serial.println(F("error renaming"));
+    // 2. create a new file with timestamped name
+    reportFreeRam();
+    createNewDataFile();
+    dataPointCounter = 0;
+    return false;
   }
 }
 
@@ -68,14 +111,5 @@ void sendData() {
   //       3. if transmitter has accepted this file, rename it to *.S
 }
 
-void setup() {
-  board.begin();
-  Serial.begin(9600);
-  Wire.begin(STORAGE);
-
-  board.createNewDataFile();
-}
-
 void loop () {
-  t.update();
 }
