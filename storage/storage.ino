@@ -1,6 +1,5 @@
 #include <SdFat.h>
 #include <Wire.h>
-#include "RTClib.h"
 
 #define DATAPOINT_MAX 5
 
@@ -22,8 +21,6 @@
 
 #define CHIP_SELECT 10
 SdFat sd;
-
-RTC_DS1307 rtc;
 
 byte dataPointCounter = 0; // the number of dataPoints in one dataFile
 
@@ -51,7 +48,7 @@ void createNewDataFile(){
   resetFilePath();
   SdFile f(filePath, O_CREAT | O_WRITE | O_EXCL);
   f.close();
-  Serial.println("created new datafile" + String(filePath));
+  Serial.println("created new datafile " + String(filePath));
 }
 
 unsigned long fileId = 9999999; // GLOBAL: starting number will be this + 1
@@ -61,9 +58,24 @@ void resetFilePath() {
   filePath[0] = '\0';
   sprintf(filePath, "%ld", fileId);
   addFilePathSuffix(LOG_SUFFIX);
-  while (sd.exists(filePath)) {
+  while (pathExists()) {
     resetFilePath();
   }
+}
+
+bool pathExists() {
+  bool exists = false;
+  char current = filePath[FILEPATH_LENGTH - 1];
+
+  filePath[FILEPATH_LENGTH - 1] = 'C';
+  if (sd.exists(filePath)) exists = true;
+  filePath[FILEPATH_LENGTH - 1] = 'S';
+  if (sd.exists(filePath)) exists = true;
+  filePath[FILEPATH_LENGTH - 1] = 'L';
+  if (sd.exists(filePath)) exists = true;
+
+  filePath[FILEPATH_LENGTH - 1] = current;
+  return exists;
 }
 
 void addFilePathSuffix(char suffix) {
@@ -76,14 +88,15 @@ void writeDataPoint(int size) {
   SdFile f;
   if(!f.open(filePath, O_RDWR | O_CREAT | O_AT_END)) {
     Serial.println(F("Error writing file"));
+  } else {
+    while (Wire.available() > 0) {
+      char c = Wire.read();
+      f.print(c);
+      Serial.print(c);
+    }
+    f.close();
+    Serial.println(F("written datapoint"));
   }
-  while (Wire.available() > 0) {
-    char c = Wire.read();
-    f.print(c);
-    Serial.print(c);
-  }
-  f.close();
-  Serial.println(F("written datapoint"));
 }
 
 bool checkCounter() {
