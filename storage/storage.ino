@@ -5,8 +5,8 @@
 #define DATAPOINT_MAX 5
 
 #define CLOSED_SUFFIX 'C'
-#define SENT_SUFFIX "S"
-#define LOG_SUFFIX "L"
+#define SENT_SUFFIX 'S'
+#define LOG_SUFFIX 'L'
 
 #define LABEL_LENGTH 1
 
@@ -48,27 +48,27 @@ void setup() {
 }
 
 void createNewDataFile(){
-  filePath[0] = '\0';
-  char unixTimestamp[TIMESTAMP_LENGTH + 1];
-  sprintf(unixTimestamp, "%ld", rtc.now().unixtime());
-  Serial.println("ts for filename: " + String(unixTimestamp));
-
-  byte i = 0;
-  byte k = 0;
-  for (i;i<FILEPATH_LENGTH;i++) {
-    if (k == 8) { filePath[i] = DOT;
-    } else if (k < 8) {
-      filePath[i] = unixTimestamp[k];
-    } else {
-      filePath[i] = unixTimestamp[k - 1];
-    }
-    k++;
-  }
-  filePath[i] = '\0';
-  strcat(filePath, LOG_SUFFIX);
+  resetFilePath();
   SdFile f(filePath, O_CREAT | O_WRITE | O_EXCL);
   f.close();
-  Serial.println("created new file: " + String(filePath));
+  Serial.println("created new datafile" + String(filePath));
+}
+
+unsigned long fileId = 9999999; // GLOBAL: starting number will be this + 1
+void resetFilePath() {
+  if (fileId == 99999999) fileId = 9999999;
+  fileId++;
+  filePath[0] = '\0';
+  sprintf(filePath, "%ld", fileId);
+  addFilePathSuffix(LOG_SUFFIX);
+  while (sd.exists(filePath)) {
+    resetFilePath();
+  }
+}
+
+void addFilePathSuffix(char suffix) {
+  strcat(filePath, ".00");
+  filePath[FILEPATH_LENGTH -1] = suffix;
 }
 
 void writeDataPoint(int size) {
@@ -83,12 +83,12 @@ void writeDataPoint(int size) {
     Serial.print(c);
   }
   f.close();
-  Serial.println();
+  Serial.println(F("written datapoint"));
 }
 
 bool checkCounter() {
   reportFreeRam();
-  Serial.print(dataPointCounter);
+  //Serial.print(dataPointCounter);
   if (dataPointCounter < DATAPOINT_MAX) {
     dataPointCounter ++;
     return true;
@@ -97,8 +97,8 @@ bool checkCounter() {
     SdFile f(filePath, O_CREAT | O_WRITE );   //init file
     filePath[FILEPATH_LENGTH - 1] = CLOSED_SUFFIX;
     if (!f.rename(sd.vwd(), filePath)) Serial.println(F("error renaming"));
+    f.close();
     // 2. create a new file with timestamped name
-    reportFreeRam();
     createNewDataFile();
     dataPointCounter = 0;
     return false;
