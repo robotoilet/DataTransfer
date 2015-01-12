@@ -1,5 +1,7 @@
 #include "TestSensor.h"
-#include "UltrasonicSR04.h"
+
+#include "DHT.h"
+#include "Dht22.h"
 
 #include <Wire.h>
 #include "RTClib.h"
@@ -21,13 +23,10 @@
 RTC_DS1307 rtc;
 
 // the actural sensors and related info this sketch knows about
-#define NUMBER_OF_SENSORS 3
+#define NUMBER_OF_SENSORS 2
 // overview over used PINs
-#define US_TRIG_PIN 13
-#define US_ECHO_PIN 12
-Sensor* sensors[NUMBER_OF_SENSORS] = { new UltrasonicSR04('a', 5,
-                                                          US_TRIG_PIN,
-                                                          US_ECHO_PIN),
+#define DHT22_PIN 5
+Sensor* sensors[NUMBER_OF_SENSORS] = { new Dht22('a', 5, DHT22_PIN),
                                        new TestSensor('c', 10) };
 
 // uncomment to inspect for memory leaks (call this function where leaks suspected):
