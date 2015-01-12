@@ -1,4 +1,5 @@
 #include "TestSensor.h"
+#include "UltrasonicSR04.h"
 
 #include <Wire.h>
 #include "RTClib.h"
@@ -19,11 +20,15 @@
 
 RTC_DS1307 rtc;
 
-// the actural sensors this sketch knows about
+// the actural sensors and related info this sketch knows about
 #define NUMBER_OF_SENSORS 3
-Sensor* sensors[NUMBER_OF_SENSORS] = { new TestSensor('a', 5),
-                                       new TestSensor('c', 10),
-                                       new TestSensor('a', 20) };
+// overview over used PINs
+#define US_TRIG_PIN 13
+#define US_ECHO_PIN 12
+Sensor* sensors[NUMBER_OF_SENSORS] = { new UltrasonicSR04('a', 5,
+                                                          US_TRIG_PIN,
+                                                          US_ECHO_PIN),
+                                       new TestSensor('c', 10) };
 
 // uncomment to inspect for memory leaks (call this function where leaks suspected):
 int freeRam() {
@@ -56,6 +61,7 @@ void collectData(unsigned long seconds) {
 // Writes one or more value(s) to a dataPoint of format
 // "(<sensorName> <timestamp> <value> [<value> ..])"
 void getDataPoint(Sensor* sensor, char* dataPoint) {
+  Serial.println("getting datapoint for: " + String(sensor->name));
   sprintf(dataPoint, "%c%c%c%ld%c", OPEN_DATAPOINT, sensor->name, SEPARATOR,
       rtc.now().unixtime(), SEPARATOR);
   char chArray[MAX_VALUE_SIZE];
