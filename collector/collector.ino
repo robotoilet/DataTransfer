@@ -1,7 +1,8 @@
-#include "TestSensor.h"
+#include "YunClient.h"
+#include "yunStorage.h"
 
-#include "DHT.h"
-#include "Dht22.h"
+#include "TestSensor.h"
+#include "UltrasonicSR04.h"
 
 #include <Wire.h>
 #include "RTClib.h"
@@ -20,14 +21,17 @@
 #define MAX_DATAPOINT_SIZE MAX_VALUE_SIZE + TIMESTAMP_SIZE + 3
 
 
-RTC_DS1307 rtc;
-
 // the actural sensors and related info this sketch knows about
-#define NUMBER_OF_SENSORS 2
+#define NUMBER_OF_SENSORS 3
 // overview over used PINs
-#define DHT22_PIN 5
-Sensor* sensors[NUMBER_OF_SENSORS] = { new Dht22('a', 5, DHT22_PIN),
+#define US_TRIG_PIN 13
+#define US_ECHO_PIN 12
+Sensor* sensors[NUMBER_OF_SENSORS] = { new UltrasonicSR04('a', 5,
+                                                          US_TRIG_PIN,
+                                                          US_ECHO_PIN),
                                        new TestSensor('c', 10) };
+
+char dUnixTimestamp[TIMESTAMP_LENGTH + 1];
 
 // uncomment to inspect for memory leaks (call this function where leaks suspected):
 int freeRam() {
@@ -41,9 +45,11 @@ void reportFreeRam() {
 }
 
 void setup() {
+  Wire.begin();
+  Bridge.begin();
+  FileSystem.begin();
   Serial.begin(9600);
-  Wire.begin(COLLECTOR);
-  rtc.adjust(DateTime(__DATE__, __TIME__));
+  createNewDataFile();
 }
 
 void collectData(unsigned long seconds) {
@@ -61,8 +67,9 @@ void collectData(unsigned long seconds) {
 // "(<sensorName> <timestamp> <value> [<value> ..])"
 void getDataPoint(Sensor* sensor, char* dataPoint) {
   Serial.println("getting datapoint for: " + String(sensor->name));
-  sprintf(dataPoint, "%c%c%c%ld%c", OPEN_DATAPOINT, sensor->name, SEPARATOR,
-      rtc.now().unixtime(), SEPARATOR);
+  getTimestamp(dUnixTimestamp);
+  sprintf(dataPoint, "%c%c%c%s%c", OPEN_DATAPOINT, sensor->name, SEPARATOR,
+          dUnixTimestamp, SEPARATOR);
   char chArray[MAX_VALUE_SIZE];
   sensor->getData(chArray);
   strcat(dataPoint, chArray);
@@ -73,6 +80,8 @@ void submitDataPoint(char* dataPoint) {
   Wire.beginTransmission(STORAGE);
   Wire.write(dataPoint);
   Wire.endTransmission();
+  checkCounter();
+  writeDataPoint(dataPoint);
   Serial.println("Just sent datapoint: " + String(dataPoint));
 }
 
