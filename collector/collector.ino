@@ -1,5 +1,10 @@
 #include "YunClient.h"
+#include "SPI.h"
+#include <PubSubClient.h>
+
 #include "yunStorage.h"
+#include "yunTimestamp.h"
+#include "yunTransmitter.h"
 
 #include "TestSensor.h"
 #include "UltrasonicSR04.h"
@@ -8,6 +13,7 @@
 #include "RTClib.h"
 
 #define REPORT_RESOLUTION 5 // when to check for sensors to report [s]
+#define SEND_RESOLUTION 41 // when to check for sensors to report [s]
 
 #define COLLECTOR 0x1
 #define STORAGE 0x2
@@ -21,6 +27,7 @@
 #define MAX_DATAPOINT_SIZE MAX_VALUE_SIZE + TIMESTAMP_SIZE + 3
 
 
+
 // the actural sensors and related info this sketch knows about
 #define NUMBER_OF_SENSORS 3
 // overview over used PINs
@@ -30,8 +37,6 @@ Sensor* sensors[NUMBER_OF_SENSORS] = { new UltrasonicSR04('a', 5,
                                                           US_TRIG_PIN,
                                                           US_ECHO_PIN),
                                        new TestSensor('c', 10) };
-
-char dUnixTimestamp[TIMESTAMP_LENGTH + 1];
 
 // uncomment to inspect for memory leaks (call this function where leaks suspected):
 int freeRam() {
@@ -49,7 +54,6 @@ void setup() {
   Bridge.begin();
   FileSystem.begin();
   Serial.begin(9600);
-  createNewDataFile();
 }
 
 void collectData(unsigned long seconds) {
@@ -67,9 +71,10 @@ void collectData(unsigned long seconds) {
 // "(<sensorName> <timestamp> <value> [<value> ..])"
 void getDataPoint(Sensor* sensor, char* dataPoint) {
   Serial.println("getting datapoint for: " + String(sensor->name));
-  getTimestamp(dUnixTimestamp);
+  char unixTimestamp[TIMESTAMP_LENGTH + 1];
+  getTimestamp(unixTimestamp);
   sprintf(dataPoint, "%c%c%c%s%c", OPEN_DATAPOINT, sensor->name, SEPARATOR,
-          dUnixTimestamp, SEPARATOR);
+          unixTimestamp, SEPARATOR);
   char chArray[MAX_VALUE_SIZE];
   sensor->getData(chArray);
   strcat(dataPoint, chArray);
@@ -77,12 +82,9 @@ void getDataPoint(Sensor* sensor, char* dataPoint) {
 }
 
 void submitDataPoint(char* dataPoint) {
-  Wire.beginTransmission(STORAGE);
-  Wire.write(dataPoint);
-  Wire.endTransmission();
-  checkCounter();
+  checkCounter(dataPoint);
   writeDataPoint(dataPoint);
-  Serial.println("Just sent datapoint: " + String(dataPoint));
+  Serial.println("Submitted datapoint: " + String(dataPoint));
 }
 
 // we need a global `previousValue` in order not to run collectData
@@ -90,9 +92,15 @@ void submitDataPoint(char* dataPoint) {
 unsigned long previousValue = 0;
 void loop() {
   unsigned long seconds = millis() / 1000;
-  if (seconds != previousValue && seconds % (REPORT_RESOLUTION) == 0) {
-    reportFreeRam();
-    collectData(seconds);
+  if (seconds != previousValue) {
+    if (seconds % (REPORT_RESOLUTION) == 0) {
+      reportFreeRam();
+      collectData(seconds);
+    }
+    if (seconds % (SEND_RESOLUTION) == 0) {
+      Serial.println("SEND_RESOLUTION triggered");
+      sendData();
+    }
   }
   previousValue = seconds;
 }
