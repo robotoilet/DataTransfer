@@ -38,6 +38,7 @@ Sensor* sensors[NUMBER_OF_SENSORS] = { new UltrasonicSR04('a', 5,
                                                           US_ECHO_PIN),
                                        new TestSensor('c', 10) };
 
+
 // uncomment to inspect for memory leaks (call this function where leaks suspected):
 int freeRam() {
   extern int __heap_start, *__brkval;
@@ -70,7 +71,6 @@ void collectData(unsigned long seconds) {
 // Writes one or more value(s) to a dataPoint of format
 // "(<sensorName> <timestamp> <value> [<value> ..])"
 void getDataPoint(Sensor* sensor, char* dataPoint) {
-  Serial.println("getting datapoint for: " + String(sensor->name));
   char unixTimestamp[TIMESTAMP_LENGTH + 1];
   getTimestamp(unixTimestamp);
   sprintf(dataPoint, "%c%c%c%s%c", OPEN_DATAPOINT, sensor->name, SEPARATOR,
@@ -82,9 +82,8 @@ void getDataPoint(Sensor* sensor, char* dataPoint) {
 }
 
 void submitDataPoint(char* dataPoint) {
-  checkCounter(dataPoint);
+  //Serial.println("[COLLECTOR:] Submitting datapoint: " + String(dataPoint));
   writeDataPoint(dataPoint);
-  Serial.println("Submitted datapoint: " + String(dataPoint));
 }
 
 // we need a global `previousValue` in order not to run collectData
@@ -94,11 +93,10 @@ void loop() {
   unsigned long seconds = millis() / 1000;
   if (seconds != previousValue) {
     if (seconds % (REPORT_RESOLUTION) == 0) {
-      reportFreeRam();
       collectData(seconds);
     }
     if (seconds % (SEND_RESOLUTION) == 0) {
-      Serial.println("SEND_RESOLUTION triggered");
+      //Serial.println("SEND_RESOLUTION triggered");
       sendData();
     }
   }
