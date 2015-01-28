@@ -2,7 +2,6 @@
 #include "SPI.h"
 #include <PubSubClient.h>
 
-#include "yunStorage.h"
 #include "yunTimestamp.h"
 #include "yunTransmitter.h"
 
@@ -17,14 +16,15 @@
 
 #define COLLECTOR 0x1
 #define STORAGE 0x2
+#define TRANSMITTER 0x3
 
 #define OPEN_DATAPOINT '('
 #define CLOSE_DATAPOINT ")"
 #define SEPARATOR ' '
 
-#define MAX_VALUE_SIZE 10
-#define TIMESTAMP_SIZE 10
-#define MAX_DATAPOINT_SIZE MAX_VALUE_SIZE + TIMESTAMP_SIZE + 3
+#define MAX_VALUE_LENGTH 10
+#define TIMESTAMP_LENGTH 10
+#define MAX_DATAPOINT_LENGTH MAX_VALUE_LENGTH + TIMESTAMP_LENGTH + 3
 
 
 
@@ -50,18 +50,11 @@ void reportFreeRam() {
   Serial.println("Free Ram : " + String(freeRam()));
 }
 
-void setup() {
-  Wire.begin();
-  Bridge.begin();
-  FileSystem.begin();
-  Serial.begin(9600);
-}
-
 void collectData(unsigned long seconds) {
   for (byte i=0;i<NUMBER_OF_SENSORS;i++) {
     Sensor* sensor = sensors[i];
     if (sensor->wantsToReport(seconds)) {
-      char dataPoint[MAX_DATAPOINT_SIZE];
+      char dataPoint[MAX_DATAPOINT_LENGTH];
       getDataPoint(sensor, dataPoint);
       submitDataPoint(dataPoint);
     }
@@ -75,16 +68,26 @@ void getDataPoint(Sensor* sensor, char* dataPoint) {
   getTimestamp(unixTimestamp);
   sprintf(dataPoint, "%c%c%c%s%c", OPEN_DATAPOINT, sensor->name, SEPARATOR,
           unixTimestamp, SEPARATOR);
-  char chArray[MAX_VALUE_SIZE];
+  char chArray[MAX_VALUE_LENGTH];
   sensor->getData(chArray);
   strcat(dataPoint, chArray);
   strcat(dataPoint, CLOSE_DATAPOINT);
 }
 
 void submitDataPoint(char* dataPoint) {
-  //Serial.println("[COLLECTOR:] Submitting datapoint: " + String(dataPoint));
-  writeDataPoint(dataPoint);
+  Serial.println("C: Submitting datapoint: " + String(dataPoint));
+  Wire.beginTransmission(STORAGE);
+  Wire.write('W'); // begin with instruction for STORAGE to write datapoint
+  Wire.write(dataPoint);
+  Wire.endTransmission();
 }
+
+void setup() {
+  Wire.begin(COLLECTOR);
+  Bridge.begin();
+  Serial.begin(9600);
+}
+
 
 // we need a global `previousValue` in order not to run collectData
 // a million billion times while loop has found the right second
