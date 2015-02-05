@@ -1,10 +1,3 @@
-#include "YunClient.h"
-#include "SPI.h"
-#include <PubSubClient.h>
-
-#include "yunTimestamp.h"
-#include "yunTransmitter.h"
-
 #include "TestSensor.h"
 #include "UltrasonicSR04.h"
 
@@ -12,7 +5,6 @@
 #include "RTClib.h"
 
 #define REPORT_RESOLUTION 5 // when to check for sensors to report [s]
-#define SEND_RESOLUTION 41 // when to check for sensors to report [s]
 
 #define COLLECTOR 0x1
 #define STORAGE 0x2
@@ -26,8 +18,6 @@
 #define TIMESTAMP_LENGTH 10
 #define MAX_DATAPOINT_LENGTH MAX_VALUE_LENGTH + TIMESTAMP_LENGTH + 3
 
-
-
 // the actural sensors and related info this sketch knows about
 #define NUMBER_OF_SENSORS 3
 // overview over used PINs
@@ -38,6 +28,7 @@ Sensor* sensors[NUMBER_OF_SENSORS] = { new UltrasonicSR04('a', 5,
                                                           US_ECHO_PIN),
                                        new TestSensor('c', 10) };
 
+RTC_DS1307 rtc;
 
 // uncomment to inspect for memory leaks (call this function where leaks suspected):
 int freeRam() {
@@ -61,10 +52,16 @@ void collectData(unsigned long seconds) {
   }
 }
 
+void getTimestamp(char* ts) {
+  sprintf(ts, "%ld", rtc.now().unixtime());
+}
+
 // Writes one or more value(s) to a dataPoint of format
 // "(<sensorName> <timestamp> <value> [<value> ..])"
 void getDataPoint(Sensor* sensor, char* dataPoint) {
   char unixTimestamp[TIMESTAMP_LENGTH + 1];
+  Serial.println("getting timestamp..");
+
   getTimestamp(unixTimestamp);
   sprintf(dataPoint, "%c%c%c%s%c", OPEN_DATAPOINT, sensor->name, SEPARATOR,
           unixTimestamp, SEPARATOR);
@@ -84,8 +81,14 @@ void submitDataPoint(char* dataPoint) {
 
 void setup() {
   Wire.begin(COLLECTOR);
-  Bridge.begin();
   Serial.begin(9600);
+  rtc.begin();
+  if (! rtc.isrunning()) {
+    Serial.println("RTC is NOT running!");
+  }
+  // following line sets the RTC to the date & time this sketch was compiled
+  // TODO: try to update via ntp
+  rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
 }
 
 
@@ -98,10 +101,7 @@ void loop() {
     if (seconds % (REPORT_RESOLUTION) == 0) {
       collectData(seconds);
     }
-    if (seconds % (SEND_RESOLUTION) == 0) {
-      //Serial.println("SEND_RESOLUTION triggered");
-      sendData();
-    }
+    // TODO: add NTP update for timestamp
   }
   previousValue = seconds;
 }
