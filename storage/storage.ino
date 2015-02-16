@@ -1,7 +1,7 @@
 #include <SdFat.h>
 #include <Wire.h>
 
-#define DATAPOINT_MAX 3
+#define DATAPOINT_MAX 5
 
 #define CLOSED_SUFFIX "C"
 #define SENT_SUFFIX "S"
@@ -30,15 +30,28 @@
 
 #define MAX_VALUE_LENGTH 10
 #define MAX_DATAPOINT_LENGTH MAX_VALUE_LENGTH + TIMESTAMP_LENGTH + 3
-#define MAX_DATAPOINT_LENGTH
 
 #define NO_DATA "!"
+
+#define SEND_RESOLUTION 10 // when to check for sensors to report [s]
 
 SdFat sd;
 
 
+// uncomment to inspect for memory leaks (call this function where leaks suspected):
+int freeRam() {
+  extern int __heap_start, *__brkval;
+  int v;
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval);
+}
+
+void reportFreeRam() {
+  Serial.println("Free Ram : " + String(freeRam()));
+}
+
 char filePath[FILEPATH_LENGTH + 1];
-byte dataPointCounter = 1; // the number of dataPoints in one dataFile
+char sendFilePath[FILEPATH_LENGTH + 1];
+byte dataPointCounter = DATAPOINT_MAX; // the number of dataPoints in one dataFile
 
 void createFile(char* fPath) {
   SdFile f(fPath, O_CREAT | O_WRITE | O_EXCL);
@@ -73,7 +86,7 @@ void createFilePath(char* fPath, char* label, char* ts) {
     k++;
   }
   fPath[i] = '\0';
-  Serial.println("S: creating filepath " + String(fPath));
+  //Serial.println("S: creating filepath " + String(fPath));
 }
 
 void renameFile(char* oldName, char* newName) {
@@ -114,28 +127,28 @@ void createNewDataFile(char* dataPoint){
   createFile(filePath);
 }
 
-bool checkCounter(char* dataPoint) {
-  //Serial.print("dp" + String(dataPointCounter) + " - ");
-  boolean bol = true;
-  if (dataPointCounter == 1) {
-    // rename current file
+bool startNewFile() {
+  if (dataPointCounter >= DATAPOINT_MAX) {
+    dataPointCounter = 1;
+    return true;
+  }
+  dataPointCounter ++;
+  return false;
+}
+
+void writeDataPoint(char* dataPoint) {
+  if (startNewFile()) {
     if (sd.exists(filePath)) {
+      // rename current file
+      sendFilePath[0] = '\0';
+      strcat(sendFilePath, filePath);
+      sendFilePath[0] = 'C';
+      Serial.println(sendFilePath);
       relabelFile(filePath, CLOSED_SUFFIX, LOGDIR_LENGTH);
     }
     // create a new file with timestamped name
     createNewDataFile(dataPoint);
-    dataPointCounter ++;
-  } else if (dataPointCounter < DATAPOINT_MAX) {
-    dataPointCounter ++;
-  } else {
-    bol = false;
-    dataPointCounter = 0;
   }
-  return bol;
-}
-
-void writeDataPoint(char* dataPoint) {
-  checkCounter(dataPoint);
   SdFile f;
   if(!f.open(filePath, O_RDWR | O_CREAT | O_AT_END)) {
     Serial.println(F("Error writing file"));
@@ -160,17 +173,18 @@ bool matchesFilter(const char* s, const char* f) {
 
 // path: where to write the next matching path (gets passed prepopulated with the directory)
 // labelFilter: label characters of filename we want
-bool nextPathInDir(char* path, char* labelFilter) {
+bool sendNextFileContent(char* labelFilter) {
   SdFile f;
+  reportFreeRam();
   Serial.println("checking files in directory..");
   while(f.openNext(sd.vwd(), O_READ)) {
-    Serial.println("hellooo..");
     char fName[13];
     f.getFilename(fName);
-    Serial.println("checking file " + String(fName));
+    Serial.println("checking " + String(fName));
     if (matchesFilter(fName, labelFilter)) {
-      path[0] = '\0';
-      strcat(path, fName);
+      Serial.println(fName);
+      sendFileContent(f);
+      f.close();
       return true;
     }
     f.close();
@@ -178,56 +192,50 @@ bool nextPathInDir(char* path, char* labelFilter) {
   return false;
 }
 
-bool readFile(SdFile f, char* buffer) {
-  byte i = 0;
-  int b = f.read();
-  while (b != -1) {
-    Serial.print((char)b);
-    buffer[i] = (char)b;
-    i++;
-    if ((char)b == CLOSE_DATAPOINT) {
-      buffer[i] = '\0';
-      return true;
-    }
-    b = f.read();
+void sendFileContent(char* fPath) {
+  SdFile f;
+  if (!f.open(fPath, O_READ)) {
+    sd.errorHalt("opening file for read failed");
+    return;
   }
+  Serial.println(fPath);
+
+  sendFileContent(f);
+
   f.close();
-  return false;
+
+  fPath[0] = '\0';
 }
 
-char sendFilePath[FILEPATH_LENGTH + 1] = "";
-SdFile sendFile;
-void sendDataPoint() {
-  char sendBuffer[MAX_DATAPOINT_LENGTH + 1];
-  Serial.println("checking file " + String(sendFilePath));
-  if (readFile(sendFile, sendBuffer)) { // still data available?
-    Serial.println("sending datapoint: " + String(sendBuffer));
-    Wire.write(sendBuffer);
-  } else { // finished reading this file
-    Serial.println("sending no data char: " + String(NO_DATA));
-    Wire.write(NO_DATA);
-    relabelFile(sendFilePath, SENT_SUFFIX, LOGDIR_LENGTH);
-    sendFilePath[0] = '\0';
+void sendFileContent(SdFile f) {
+  Wire.beginTransmission(TRANSMITTER);
+  byte b;
+  for (int i=0;i<BUFFER_LENGTH-2;i++) {
+    b = f.read();
+    if (b == 255) {
+      Wire.write('!');
+      Wire.endTransmission();
+      return;
+    }
+    Wire.write((char)b);
   }
+  Wire.endTransmission();
+  sendFileContent(f);
 }
+
 
 void getDataForSending() {
-  if (sendFilePath[0] == '\0') {  // starting at the beginning of a fresh file
-    Serial.println("sendfilepath empty");
-    if (nextPathInDir(sendFilePath, CLOSED_SUFFIX)) { // any data available?
-      Serial.println("sendFilePath: " + String(sendFilePath));
-      if(sendFile.open(sendFilePath, O_READ)) {
-        sendDataPoint();
-      } else {
-        Serial.println(F("Error reading file"));
-      }
-    } else {
-      Serial.println("S: can't find any matching files at " + String(sendFilePath));
-      Wire.write(NO_DATA);
-    }
+//  Wire.beginTransmission(TRANSMITTER);
+  if (sendNextFileContent(CLOSED_SUFFIX)) { // any data available?
+    Serial.println("hurray");
+    reportFreeRam();
+    //relabelFile(sendFilePath, SENT_SUFFIX, LOGDIR_LENGTH);
   } else {
-    sendDataPoint();
+    Serial.println("S: can't find any files to send from");
+//    Wire.write(NO_DATA);
   }
+//  Wire.endTransmission();
+  sd.chdir();
 }
 
 void doJob(int dataSize) {
@@ -251,15 +259,15 @@ void doJob(int dataSize) {
   }
   switch (instruction) {
     case 68: // char 'D' == delete file instruction
-      Serial.println("S: got instruction to remove file for checksum " + String(msg));
+      Serial.println("S: have2remove file");
       removeTransferredFile(msg);
       break;
     case 87: // char 'W' == write datapoint instruction
-      Serial.println("S: got instruction to write datapoint " + String(msg));
+      Serial.println("S: have2write datapoint");
       writeDataPoint(msg);
       break;
     default:
-      Serial.println("S: ERROR! Unknown instruction from Wire: " + String((char)instruction));
+      Serial.println("S Error!");
   }
   delete[] msg;
 }
@@ -268,9 +276,23 @@ void setup() {
   Serial.begin(9600);
   Wire.begin(STORAGE);
   if (!sd.begin(CHIP_SELECT, SPI_HALF_SPEED)) sd.initErrorHalt();
+  Serial.println(BUFFER_LENGTH);
   Wire.onReceive(doJob);
-  Wire.onRequest(getDataForSending);
 }
 
+// we need a global `previousValue` in order not to run collectData
+// a million billion times while loop has found the right second
+unsigned long previousValue = 0;
 void loop() {
+  unsigned long seconds = millis() / 1000;
+  if (seconds != previousValue) {
+    Serial.println(seconds);
+    if (seconds % (SEND_RESOLUTION) == 0) {
+      Serial.println("S: send resolution triggered.");
+      if (sendFilePath[0] != '\0') {
+        sendFileContent(sendFilePath);
+      }
+    }
+  }
+  previousValue = seconds;
 }

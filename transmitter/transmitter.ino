@@ -11,14 +11,13 @@
 #define STORAGE 0x2
 #define TRANSMITTER 0x3
 
-
-#define SEND_RESOLUTION 11 // when to check for sensors to report [s]
-
+#define SEND_RESOLUTION 20 // when to check for sensors to report [s]
 
 void setup() {
-  Wire.begin(TRANSMITTER);
   Serial.begin(9600);
   Bridge.begin();
+  Wire.onReceive(retrieveDataForSending);
+  Wire.begin(TRANSMITTER);
 }
 
 // we need a global `previousValue` in order not to run collectData
@@ -27,10 +26,11 @@ unsigned long previousValue = 0;
 void loop() {
   unsigned long seconds = millis() / 1000;
   if (seconds != previousValue) {
-    Serial.println("second " + String(seconds));
-    if (seconds % (SEND_RESOLUTION) == 0) {
-      Serial.println("send resolution triggered.");
-      sendData();
+    Serial.println(ourSuperDataReady);
+    Serial.println(seconds);
+    if (seconds % SEND_RESOLUTION == 0 && ourSuperDataReady) {
+      Serial.println("T: send resolution triggered, data ready.");
+      sendToServer();
     }
   }
   previousValue = seconds;
